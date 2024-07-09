@@ -76,18 +76,10 @@ def compute_C_and_R(
         sampled_columns_idx[j] = rng.choice(n_cols, 1, p=A_ls_prob_columns[i])
 
     # Build `R`
-    R = (
-        A[A_sampled_rows_idx, :]
-        * A_frobenius
-        / (np.sqrt(r) * A_row_norms[A_sampled_rows_idx, None])
-    )
+    R = A[A_sampled_rows_idx, :] * A_frobenius / (np.sqrt(r) * A_row_norms[A_sampled_rows_idx, None])
 
     # Build `C`
-    C = (
-        R[:, sampled_columns_idx]
-        * A_frobenius
-        / (np.sqrt(c) * la.norm(R[:, sampled_columns_idx], axis=0))
-    )
+    C = R[:, sampled_columns_idx] * A_frobenius / (np.sqrt(c) * la.norm(R[:, sampled_columns_idx], axis=0))
 
     # Build LS distribution to sample columns from matrix `R`
     R_ls_prob_columns = R**2 / la.norm(R, axis=1)[:, None] ** 2
@@ -159,10 +151,7 @@ def estimate_lambdas(
 
             # Estimate inner product between `A` and `outer_prod_b_v`
             lambdas_realizations[realization_i, l] = np.mean(
-                A_frobenius**2
-                / A[samples_i, samples_j]
-                * outer_prod_b_v
-                / sigma[l] ** 2
+                A_frobenius**2 / A[samples_i, samples_j] * outer_prod_b_v / sigma[l] ** 2
             )
 
     lambdas = np.median(lambdas_realizations, axis=0)
@@ -207,11 +196,7 @@ def sample_from_x(
         sample_j = rng.choice(n_cols, 1, p=R_ls_prob_columns[sample_i])[0]
 
         # Sample column of `R`
-        R_j = (
-            A[A_sampled_rows_idx, sample_j]
-            * A_frobenius
-            / (np.sqrt(r) * A_row_norms[A_sampled_rows_idx])
-        )
+        R_j = A[A_sampled_rows_idx, sample_j] * A_frobenius / (np.sqrt(r) * A_row_norms[A_sampled_rows_idx])
         R_j_norm = la.norm(R_j)
 
         # Determine if we output `sample_j`

@@ -2,9 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 from numpy.linalg import pinv
-
-import quantum_inspired as qi
-from visualization import plot_solution
+from quantum_inspired_algorithms import quantum_inspired as qi
+from quantum_inspired_algorithms.visualization import plot_solution
 
 
 def _load_data():
@@ -39,12 +38,8 @@ def test_solve_qi():
     n_samples = 100
     n_entries_x = 10
     rng = np.random.RandomState(7)
-    sampled_indices, sampled_x = qi.solve_qi(
-        A, b, r, c, rank, n_samples, n_entries_x, rng
-    )
-    assert np.all(
-        sampled_indices == np.asarray([234, 106, 136, 54, 130, 36, 161, 150, 173, 32])
-    )
+    sampled_indices, sampled_x = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, rng)
+    assert np.all(sampled_indices == np.asarray([234, 106, 136, 54, 130, 36, 161, 150, 173, 32]))
     assert np.allclose(
         sampled_x,
         [
@@ -74,9 +69,7 @@ def test_finding_largest_entries():
     n_samples = 100
     n_entries_x = 1000
     rng = np.random.RandomState(7)
-    sampled_indices, sampled_x = qi.solve_qi(
-        A, b, r, c, rank, n_samples, n_entries_x, rng
-    )
+    sampled_indices, sampled_x = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, rng)
 
     # Find most frequent outcomes
     unique_x_idx, counts = np.unique(sampled_indices, return_counts=True)
@@ -103,4 +96,4 @@ def test_finding_largest_entries():
 
 
 if __name__ == "__main__":
-    test_least_squares()
+    test_finding_largest_entries()
