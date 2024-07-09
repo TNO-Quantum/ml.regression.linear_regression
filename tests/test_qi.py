@@ -89,7 +89,7 @@ def test_finding_largest_entries():
         solution=np.abs(x_sol)[unique_x_idx],
         expected_counts=counts,
         counts=n_entries_x * np.abs(x_sol)[unique_x_idx] ** 2,
-        plot_name="test_least_squares",
+        plot_name="test_finding_largest_entries",
     )
 
     assert n_matches == 21
