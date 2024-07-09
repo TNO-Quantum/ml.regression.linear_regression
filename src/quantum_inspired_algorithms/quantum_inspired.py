@@ -147,7 +147,7 @@ def estimate_lambdas(
             v_approx = R.T @ (w[:, l] / sigma[l])
 
             # Compute entries of outer product between `b` and `v_approx`
-            outer_prod_b_v = b[samples_i] * v_approx
+            outer_prod_b_v = np.squeeze(b[samples_i]) * v_approx
 
             # Estimate inner product between `A` and `outer_prod_b_v`
             lambdas_realizations[realization_i, l] = np.mean(
