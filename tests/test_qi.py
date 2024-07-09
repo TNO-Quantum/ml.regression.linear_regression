@@ -85,11 +85,11 @@ def test_finding_largest_entries():
     n_matches = plot_solution(
         x_sol,
         x_idx,
+        "test_finding_largest_entries",
         expected_solution=np.abs(x_entries),
         solution=np.abs(x_sol)[unique_x_idx],
         expected_counts=counts,
         counts=n_entries_x * np.abs(x_sol)[unique_x_idx] ** 2,
-        plot_name="test_finding_largest_entries",
     )
 
     assert n_matches == 21

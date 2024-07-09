@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 import matplotlib
 import numpy as np
 import seaborn as sns
@@ -25,11 +26,11 @@ def _save_fig(name: str):
 def plot_solution(
     x_reference: NDArray,
     best_idx: NDArray,
-    expected_solution: NDArray,
-    solution: NDArray,
-    expected_counts: NDArray,
-    counts: NDArray,
     plot_name: str,
+    expected_solution: Optional[NDArray] = None,
+    solution: Optional[NDArray] = None,
+    expected_counts: Optional[NDArray] = None,
+    counts: Optional[NDArray] = None,
 ) -> int:
     """Plot (sorted) reference solution along with best indices provided."""
     # Squeeze array
@@ -56,12 +57,14 @@ def plot_solution(
     plt.title(f"{n_matches} out of {n_best_idx}")
     _save_fig(f"{plot_name}_matches")
 
-    # Plot solution
-    sns.scatterplot(x=solution, y=expected_solution)
-    _save_fig(f"{plot_name}_solution_scatter")
+    if solution is not None and expected_solution is not None:
+        # Plot solution
+        sns.scatterplot(x=solution, y=expected_solution)
+        _save_fig(f"{plot_name}_solution_scatter")
 
-    # Plot counts
-    sns.scatterplot(x=counts, y=expected_counts)
-    _save_fig(f"{plot_name}_counts_scatter")
+    if counts is not None and expected_counts is not None:
+        # Plot counts
+        sns.scatterplot(x=counts, y=expected_counts)
+        _save_fig(f"{plot_name}_counts_scatter")
 
     return n_matches
