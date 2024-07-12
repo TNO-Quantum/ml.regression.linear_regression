@@ -1,9 +1,12 @@
+import logging
 import numpy as np
 import pandas as pd
 import pytest
 from numpy.linalg import pinv
 from quantum_inspired_algorithms import quantum_inspired as qi
 from quantum_inspired_algorithms.visualization import plot_solution
+
+logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S")
 
 
 def _load_data():
@@ -53,6 +56,41 @@ def test_solve_qi():
             0.12723163,
             0.19693845,
             0.21950633,
+        ],
+    )
+
+
+def test_solve_qi_ridge():
+    """Test quantum-inspired ridge regression."""
+    # Load data
+    A, b, _ = _load_data()
+
+    # Solve using quantum-inspired algorithm
+    rank = 3
+    r = 70
+    c = 70
+    n_samples = 100
+    n_entries_x = 10
+    rng = np.random.RandomState(7)
+    func = lambda arg: (arg**2 + 0.3) / arg
+    sampled_indices, sampled_x = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, rng, func=func)
+    print(sampled_indices)
+    print(sampled_x)
+
+    assert np.all(sampled_indices == np.asarray([234, 106, 136, 54, 130, 36, 161, 150, 173, 32]))
+    assert np.allclose(
+        sampled_x,
+        [
+            -0.13821783,
+            0.06591698,
+            -0.08762728,
+            -0.02747263,
+            0.18573576,
+            -0.23094832,
+            0.17035964,
+            0.12719866,
+            0.1968863,
+            0.21944595,
         ],
     )
 

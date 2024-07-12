@@ -1,3 +1,7 @@
+import logging
+import warnings
+from typing import Callable
+from typing import Optional
 import numpy as np
 from numpy import linalg as la
 from numpy.typing import NDArray
@@ -73,7 +77,7 @@ def compute_C_and_R(
         i = rng.choice(A_sampled_rows_idx, replace=True)
 
         # Sample column from LS distribution of row `A[i]`
-        sampled_columns_idx[j] = rng.choice(n_cols, 1, p=A_ls_prob_columns[i])
+        sampled_columns_idx[j] = rng.choice(n_cols, 1, p=A_ls_prob_columns[i, :])[0]
 
     # Build `R`
     R = A[A_sampled_rows_idx, :] * A_frobenius / (np.sqrt(r) * A_row_norms[A_sampled_rows_idx, None])
@@ -100,11 +104,13 @@ def estimate_lambdas(
     A_ls_prob_columns: NDArray,
     A_frobenius: NDArray,
     rng: np.random.RandomState,
+    func: Callable[[float], float],
 ) -> NDArray:
     """Estimate lambda coefficients.
 
     Args:
         A: coefficient matrix.
+        b: vector b.
         n_samples: number of samples to estimate inner products.
                    Note: the sampling is  performed from entries of `A`,
                    so there are `A.shape[0] * A.shape[1]` possible entries.
@@ -117,6 +123,7 @@ def estimate_lambdas(
         A_ls_prob_columns: column LS probability distribution of `A`.
         A_frobenius: Frobenius norm of `A`.
         rng: random state.
+        func: function to transform singular values when estimating lambda coefficients.
 
     Returns:
         lambda coefficients
@@ -126,6 +133,7 @@ def estimate_lambdas(
     n_realizations = 10
     lambdas_realizations = np.zeros((n_realizations, rank))
     for realization_i in range(n_realizations):
+        logging.info(f"---Realization {realization_i}")
         for l in range(rank):
             # 1. Generate sample indices
             samples_i = []
@@ -150,9 +158,10 @@ def estimate_lambdas(
             outer_prod_b_v = np.squeeze(b[samples_i]) * v_approx
 
             # Estimate inner product between `A` and `outer_prod_b_v`
-            lambdas_realizations[realization_i, l] = np.mean(
-                A_frobenius**2 / A[samples_i, samples_j] * outer_prod_b_v / sigma[l] ** 2
-            )
+            inner_prod = np.mean(A_frobenius**2 / A[samples_i, samples_j] * outer_prod_b_v)
+
+            # Compute lambda
+            lambdas_realizations[realization_i, l] = inner_prod / sigma[l] / func(sigma[l])
 
     lambdas = np.median(lambdas_realizations, axis=0)
 
@@ -175,7 +184,7 @@ def sample_from_x(
         A: coefficient matrix.
         A_sampled_rows_idx: indices of the r sampled rows of matrix A
         A_row_norms: norm of the rows of `A`.
-        A_ls_prob_columns: column LS probability distribution of `A`.
+        R_ls_prob_columns: column LS probability distribution of `R`.
         A_frobenius: Frobenius norm of `A`.
         omega: vector omega.
         omega_norm: norm of `omega`.
@@ -215,6 +224,8 @@ def solve_qi(
     n_samples: int,
     n_entries_x: int,
     rng: np.random.RandomState,
+    sigma_threshold: float = 1e-15,
+    func: Optional[Callable[[float], float]] = None,
 ) -> tuple[NDArray, NDArray]:
     """Solves linear system of equations using a quantum-inspired algorithm.
 
@@ -229,23 +240,41 @@ def solve_qi(
                    so there are `A.shape[0] * A.shape[1]` possible entries.
         n_entries_x: number of entries to be sampled from the solution vector.
         rng: random state.
+        sigma_threshold: the argument `rank` is recomputed in case it is higher
+                         the number of singular values below this threhold.
+        func: function to transform singular values when estimating lambda coefficients.
+              This can be used for Tikhonov regularization purposes.
 
     Returns:
         sampled indices,
         sampled entries
     """
     # 1. Generate length-square probability distributions to sample from matrix `A`
+    logging.info("1. Generate length-square probability distributions to sample from matrix `A`")
     A_ls_prob_rows, A_ls_prob_columns, A_row_norms, A_frobenius = compute_ls_probs(A)
 
     # 2. Build matrix `C` by sampling `r` rows and `c` columns
+    logging.info("2. Build matrix `C` by sampling `r` rows and `c` columns")
     C, _, R_ls_prob_columns, A_sampled_rows_idx = compute_C_and_R(
         A, r, c, A_row_norms, A_ls_prob_rows, A_ls_prob_columns, A_frobenius, rng
     )
 
     # 3. Compute the SVD of `C`
+    logging.info("3. Compute the SVD of `C`")
     w, sigma, _ = la.svd(C, full_matrices=False)
 
+    # Recompute rank
+    rank_recomputed = np.count_nonzero(sigma > sigma_threshold)
+    if rank_recomputed < rank:
+        message = f"desired rank: {rank}; recomputed: {rank_recomputed}"
+        warnings.warn(message, RuntimeWarning)
+        logging.warning(message)
+        rank = rank_recomputed
+
     # 4. Estimate lambda coefficients
+    logging.info("4. Estimate lambda coefficients")
+    if func is None:
+        func = lambda arg: arg
     lambdas = estimate_lambdas(
         A,
         b,
@@ -259,9 +288,11 @@ def solve_qi(
         A_ls_prob_columns,
         A_frobenius,
         rng,
+        func=func,
     )
 
     # 5. Sample solution vector
+    logging.info("5. Sample solution vector")
 
     # Compute `omega`
     omega = w[:, :rank] @ (lambdas / sigma[:rank])
