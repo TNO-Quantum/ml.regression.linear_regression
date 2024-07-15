@@ -395,7 +395,7 @@ def solve_qi(
                 rng,
             )
             if (t + 1) % 100 == 0:
-                logging.info(f"{t + 1} entries sampled out of {n_entries_b}")
+                logging.info(f"---{t + 1} entries sampled out of {n_entries_b}")
 
     # 6. Sample predicted `x`
     if n_entries_x > 0:
@@ -420,6 +420,6 @@ def solve_qi(
                 rng,
             )
             if (t + 1) % 100 == 0:
-                logging.info(f"{t + 1} entries sampled out of {n_entries_x}")
+                logging.info(f"---{t + 1} entries sampled out of {n_entries_x}")
 
     return sampled_indices_x, sampled_x, sampled_indices_b, sampled_b
