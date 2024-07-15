@@ -2,7 +2,7 @@ import logging
 import numpy as np
 import pandas as pd
 import pytest
-from numpy.linalg import pinv
+from numpy.linalg import pinv, norm
 from quantum_inspired_algorithms import quantum_inspired as qi
 from quantum_inspired_algorithms.visualization import plot_solution
 
@@ -40,8 +40,9 @@ def test_solve_qi():
     c = 70
     n_samples = 100
     n_entries_x = 10
+    n_entries_b = 0
     rng = np.random.RandomState(7)
-    sampled_indices, sampled_x = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, rng)
+    sampled_indices, sampled_x, _, _ = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng)
     assert np.all(sampled_indices == np.asarray([234, 106, 136, 54, 130, 36, 161, 150, 173, 32]))
     assert np.allclose(
         sampled_x,
@@ -60,6 +61,38 @@ def test_solve_qi():
     )
 
 
+def test_solve_qi_b():
+    """Test quantum-inspired linear solver to predict `b`."""
+    # Load data
+    A, b, _ = _load_data()
+
+    # Solve using quantum-inspired algorithm
+    rank = 3
+    r = 70
+    c = 70
+    n_samples = 100
+    n_entries_x = 0
+    n_entries_b = 10
+    rng = np.random.RandomState(7)
+    _, _, sampled_indices, sampled_b = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng)
+    assert np.all(sampled_indices == np.asarray([156, 366, 487, 293, 170, 145, 330, 302, 431, 277]))
+    assert np.allclose(
+        sampled_b,
+        [
+            -6.53513244,
+            -4.44876807,
+            -1.75511705,
+            -1.89623062,
+            2.05828132,
+            -1.69277884,
+            -3.94735972,
+            -4.23570172,
+            4.34278576,
+            3.62448208,
+        ],
+    )
+
+
 def test_solve_qi_ridge():
     """Test quantum-inspired ridge regression."""
     # Load data
@@ -71,9 +104,12 @@ def test_solve_qi_ridge():
     c = 70
     n_samples = 100
     n_entries_x = 10
+    n_entries_b = 0
     rng = np.random.RandomState(7)
     func = lambda arg: (arg**2 + 0.3) / arg
-    sampled_indices, sampled_x = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, rng, func=func)
+    sampled_indices, sampled_x, _, _ = qi.solve_qi(
+        A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng, func=func
+    )
     print(sampled_indices)
     print(sampled_x)
 
@@ -95,7 +131,46 @@ def test_solve_qi_ridge():
     )
 
 
-def test_finding_largest_entries():
+def test_finding_largest_entries_b():
+    """Test quantum-inspired least squares."""
+    # Load data
+    A, b, top_size = _load_data()
+
+    # Solve using quantum-inspired algorithm
+    rank = 3
+    r = 70
+    c = 80
+    n_samples = 100
+    n_entries_x = 0
+    n_entries_b = 1000
+    rng = np.random.RandomState(111)
+    _, _, sampled_indices, sampled_b = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng)
+
+    # Find most frequent outcomes
+    unique_b_idx, counts = np.unique(sampled_indices, return_counts=True)
+    sort_idx = np.flip(np.argsort(counts))
+    b_idx = unique_b_idx[sort_idx][:top_size]
+
+    # Compare results
+    df = pd.DataFrame({"b_idx_samples": sampled_indices, "b_samples": sampled_b})
+    df_mean = df.groupby("b_idx_samples")["b_samples"].mean()
+    df_counts = df.groupby("b_idx_samples").count()
+    unique_sampled_indices = df_mean.keys()
+    unique_sampled_b = df_mean.values
+    n_matches = plot_solution(
+        b,
+        b_idx,
+        "test_finding_largest_entries_b",
+        expected_solution=np.abs(b)[unique_sampled_indices],
+        solution=np.abs(unique_sampled_b),
+        expected_counts=n_entries_b * np.abs(b / norm(b))[unique_sampled_indices] ** 2,
+        counts=np.squeeze(np.round(df_counts.values)),
+    )
+
+    assert n_matches == 16
+
+
+def test_finding_largest_entries_x():
     """Test quantum-inspired least squares."""
     # Load data
     A, b, top_size = _load_data()
@@ -106,8 +181,9 @@ def test_finding_largest_entries():
     c = 70
     n_samples = 100
     n_entries_x = 1000
+    n_entries_b = 0
     rng = np.random.RandomState(7)
-    sampled_indices, sampled_x = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, rng)
+    sampled_indices, sampled_x, _, _ = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng)
 
     # Find most frequent outcomes
     unique_x_idx, counts = np.unique(sampled_indices, return_counts=True)
@@ -119,19 +195,22 @@ def test_finding_largest_entries():
 
     # Compare results
     df = pd.DataFrame({"x_idx_samples": sampled_indices, "x_samples": sampled_x})
-    x_entries = df.groupby("x_idx_samples")["x_samples"].mean().values
+    df_mean = df.groupby("x_idx_samples")["x_samples"].mean()
+    df_counts = df.groupby("x_idx_samples").count()
+    unique_sampled_indices = df_mean.keys()
+    unique_sampled_x = df_mean.values
     n_matches = plot_solution(
         x_sol,
         x_idx,
-        "test_finding_largest_entries",
-        expected_solution=np.abs(x_entries),
-        solution=np.abs(x_sol)[unique_x_idx],
-        expected_counts=counts,
-        counts=n_entries_x * np.abs(x_sol)[unique_x_idx] ** 2,
+        "test_finding_largest_entries_x",
+        expected_solution=np.abs(x_sol)[unique_sampled_indices],
+        solution=np.abs(unique_sampled_x),
+        expected_counts=n_entries_x * np.abs(x_sol / norm(x_sol))[unique_sampled_indices] ** 2,
+        counts=np.squeeze(np.round(df_counts.values)),
     )
 
     assert n_matches == 21
 
 
 if __name__ == "__main__":
-    test_finding_largest_entries()
+    test_finding_largest_entries_b()

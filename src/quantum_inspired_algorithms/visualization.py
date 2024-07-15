@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional
 import matplotlib
+import pandas as pd
 import numpy as np
 import seaborn as sns
 
@@ -21,6 +22,17 @@ def _save_fig(name: str):
     plots_dir = _get_plot_dir()
     plt.savefig(Path(plots_dir, name), dpi=600, bbox_inches="tight")
     plt.close("all")
+
+
+def _scatter_plot(data: pd.DataFrame):
+    sns.scatterplot(data=data, x="expected", y="actual")
+    min_value = np.min([np.min(data["actual"]), np.min(data["expected"])])
+    max_value = np.max([np.max(data["actual"]), np.max(data["expected"])])
+    plt.plot(
+        [min_value, max_value],
+        [min_value, max_value],
+        "r-",
+    )
 
 
 def plot_solution(
@@ -59,12 +71,14 @@ def plot_solution(
 
     if solution is not None and expected_solution is not None:
         # Plot solution
-        sns.scatterplot(x=solution, y=expected_solution)
+        solution_df = pd.DataFrame({"actual": solution, "expected": expected_solution})
+        _scatter_plot(solution_df)
         _save_fig(f"{plot_name}_solution_scatter")
 
     if counts is not None and expected_counts is not None:
         # Plot counts
-        sns.scatterplot(x=counts, y=expected_counts)
+        counts_df = pd.DataFrame({"actual": counts, "expected": expected_counts})
+        _scatter_plot(counts_df)
         _save_fig(f"{plot_name}_counts_scatter")
 
-    return n_matches
+    return int(n_matches)
