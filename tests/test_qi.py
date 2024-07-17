@@ -2,14 +2,15 @@ import logging
 import numpy as np
 import pandas as pd
 import pytest
-from numpy.linalg import pinv, norm
+from numpy.linalg import norm
+from numpy.linalg import pinv
 from quantum_inspired_algorithms import quantum_inspired as qi
 from quantum_inspired_algorithms.visualization import plot_solution
 
 logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S")
 
 
-def _load_data():
+def _load_data(underdetermined: bool = False):
     """Load sample dataset."""
     rng = np.random.RandomState(9)
     rank = 3
@@ -19,12 +20,13 @@ def _load_data():
     U, S, V = np.linalg.svd(A, full_matrices=False)
     S[rank:] = 0
     A = U @ np.diag(S) @ V
-    x = rng.normal(0, 1, n)
+    if underdetermined:
+        A = A.T
+    x = rng.normal(0, 1, A.shape[1])
     b = A @ x
 
     top_percent = 0.1
-    size = A.shape[1]
-    top_size = int(top_percent * size)
+    top_size = int(top_percent * A.shape[1])
 
     return A, b, top_size
 
@@ -129,6 +131,45 @@ def test_solve_qi_ridge():
             0.21944595,
         ],
     )
+
+
+def test_finding_largest_entries_b_underdetermined():
+    """Test quantum-inspired least squares."""
+    # Load data
+    A, b, top_size = _load_data(underdetermined=True)
+
+    # Solve using quantum-inspired algorithm
+    rank = 3
+    r = 70
+    c = 80
+    n_samples = 100
+    n_entries_x = 0
+    n_entries_b = 1000
+    rng = np.random.RandomState(111)
+    _, _, sampled_indices, sampled_b = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng)
+
+    # Find most frequent outcomes
+    unique_b_idx, counts = np.unique(sampled_indices, return_counts=True)
+    sort_idx = np.flip(np.argsort(counts))
+    b_idx = unique_b_idx[sort_idx][:top_size]
+
+    # Compare results
+    df = pd.DataFrame({"b_idx_samples": sampled_indices, "b_samples": sampled_b})
+    df_mean = df.groupby("b_idx_samples")["b_samples"].mean()
+    df_counts = df.groupby("b_idx_samples").count()
+    unique_sampled_indices = df_mean.keys()
+    unique_sampled_b = df_mean.values
+    n_matches = plot_solution(
+        b,
+        b_idx,
+        "test_finding_largest_entries_b_underdetermined",
+        expected_solution=np.abs(b)[unique_sampled_indices],
+        solution=np.abs(unique_sampled_b),
+        expected_counts=n_entries_b * np.abs(b / norm(b))[unique_sampled_indices] ** 2,
+        counts=np.squeeze(np.round(df_counts.values)),
+    )
+
+    assert n_matches == 40
 
 
 def test_finding_largest_entries_b():
