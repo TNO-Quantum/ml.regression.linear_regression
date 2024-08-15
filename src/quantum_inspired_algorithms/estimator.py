@@ -22,7 +22,7 @@ class QILinearEstimator:
         c: int,
         rank: int,
         n_samples: int,
-        rng: np.random.RandomState,
+        random_state: np.random.RandomState,
         sigma_threshold: float = 1e-15,
         func: Optional[Callable[[float], float]] = None,
     ) -> None:
@@ -35,7 +35,7 @@ class QILinearEstimator:
             n_samples: number of samples to estimate inner products.
                        Note: the sampling is  performed from entries of `A`,
                        so there are `A.shape[0] * A.shape[1]` possible entries.
-            rng: random state.
+            random_state: random state.
             sigma_threshold: the argument `rank` is recomputed in case it is higher
                              the number of singular values below this threhold.
             func: function to transform singular values when estimating lambda coefficients.
@@ -45,20 +45,20 @@ class QILinearEstimator:
         self.c = c
         self.rank = rank
         self.n_samples = n_samples
-        self.rng = rng
+        self.random_state = random_state
         self.sigma_threshold = sigma_threshold
         self.func = func
 
     def fit(
         self,
-        A: NDArray,
-        b: NDArray,
+        A: NDArray[np.float64],
+        b: NDArray[np.float64],
     ) -> QILinearEstimator:
         """Fit data using quantum-inspired algorithm.
 
         Args:
             A: coefficient matrix.
-            b: vector b.
+            b: vector `b`.
         """
         # Validate input
         if self.rank <= 0:
@@ -87,7 +87,7 @@ class QILinearEstimator:
             self.A_ls_prob_rows_,
             self.A_ls_prob_columns_,
             self.A_frobenius_,
-            self.rng,
+            self.random_state,
         )
 
         # 3. Compute the SVD of `C`
@@ -105,9 +105,14 @@ class QILinearEstimator:
 
         # 4. Estimate lambda coefficients
         logging.info("4. Estimate lambda coefficients")
-        func = self.func
         if self.func is None:
-            func = lambda arg: arg
+
+            def func_(arg: float) -> float:
+                return arg
+
+            func = func_
+        else:
+            func = self.func
         self.lambdas_ = estimate_lambdas(
             A,
             b,
@@ -120,7 +125,7 @@ class QILinearEstimator:
             self.A_ls_prob_rows_,
             self.A_ls_prob_columns_,
             self.A_frobenius_,
-            self.rng,
+            self.random_state,
             func=func,
         )
 
@@ -128,9 +133,9 @@ class QILinearEstimator:
 
     def predict_x(
         self,
-        A: NDArray,
+        A: NDArray[np.float64],
         n_entries_x: int,
-    ) -> tuple[NDArray, NDArray]:
+    ) -> tuple[NDArray[np.uint32], NDArray[np.float64]]:
         """Predict `x` using quantum-inspired model.
 
         Args:
@@ -144,7 +149,7 @@ class QILinearEstimator:
         if n_entries_x == 0:
             raise ValueError("`n_entries_x` should be greater than 0")
 
-        logging.info("6. Sample predicted `x`")
+        logging.info("Sample predicted `x`")
 
         # Compute `omega`
         omega = self.w_left_[:, : self.rank_] @ (self.lambdas_ / self.sigma_[: self.rank_])
@@ -162,7 +167,7 @@ class QILinearEstimator:
                 self.A_frobenius_,
                 omega,
                 omega_norm,
-                self.rng,
+                self.random_state,
             )
             if (t + 1) % 100 == 0:
                 logging.info(f"---{t + 1} entries sampled out of {n_entries_x}")
@@ -171,9 +176,9 @@ class QILinearEstimator:
 
     def predict_b(
         self,
-        A: NDArray,
+        A: NDArray[np.float64],
         n_entries_b: int,
-    ) -> tuple[NDArray, NDArray]:
+    ) -> tuple[NDArray[np.uint32], NDArray[np.float64]]:
         """Predict `b` using quantum-inspired model.
 
         Args:
@@ -186,7 +191,7 @@ class QILinearEstimator:
         if n_entries_b == 0:
             raise ValueError("`n_entries_b` should be greater than 0")
 
-        logging.info("5. Sample predicted `b`")
+        logging.info("Sample predicted `b`")
 
         # Compute `phi`
         phi = self.w_right_T_.T[:, : self.rank_] @ self.lambdas_
@@ -205,7 +210,7 @@ class QILinearEstimator:
                 A_s_frobenius,
                 phi,
                 phi_norm,
-                self.rng,
+                self.random_state,
             )
             if (t + 1) % 100 == 0:
                 logging.info(f"---{t + 1} entries sampled out of {n_entries_b}")
