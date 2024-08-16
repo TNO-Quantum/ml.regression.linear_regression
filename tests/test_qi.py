@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from numpy.linalg import norm
 from numpy.linalg import pinv
-from quantum_inspired_algorithms import quantum_inspired as qi
+from quantum_inspired_algorithms.estimator import QILinearEstimator
 from quantum_inspired_algorithms.visualization import plot_solution
 
 logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S")
@@ -42,9 +42,10 @@ def test_solve_qi():
     c = 70
     n_samples = 100
     n_entries_x = 10
-    n_entries_b = 0
     rng = np.random.RandomState(7)
-    sampled_indices, sampled_x, _, _ = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng)
+    qi = QILinearEstimator(r, c, rank, n_samples, rng)
+    qi = qi.fit(A, b)
+    sampled_indices, sampled_x = qi.predict_x(A, n_entries_x)
     assert np.all(sampled_indices == np.asarray([234, 106, 136, 54, 130, 36, 161, 150, 173, 32]))
     assert np.allclose(
         sampled_x,
@@ -73,10 +74,11 @@ def test_solve_qi_b():
     r = 70
     c = 70
     n_samples = 100
-    n_entries_x = 0
     n_entries_b = 10
     rng = np.random.RandomState(7)
-    _, _, sampled_indices, sampled_b = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng)
+    qi = QILinearEstimator(r, c, rank, n_samples, rng)
+    qi = qi.fit(A, b)
+    sampled_indices, sampled_b = qi.predict_b(A, n_entries_b)
     assert np.all(sampled_indices == np.asarray([156, 366, 487, 293, 170, 145, 330, 302, 431, 277]))
     assert np.allclose(
         sampled_b,
@@ -106,13 +108,14 @@ def test_solve_qi_ridge():
     c = 70
     n_samples = 100
     n_entries_x = 10
-    n_entries_b = 0
     rng = np.random.RandomState(7)
-    func = lambda arg: (arg**2 + 0.3) / arg
-    sampled_indices, sampled_x, _, _ = qi.solve_qi(
-        A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng, func=func
-    )
-    print(sampled_indices)
+
+    def func(arg: float) -> float:
+        return (arg**2 + 0.3) / arg
+
+    qi = QILinearEstimator(r, c, rank, n_samples, rng, func=func)
+    qi = qi.fit(A, b)
+    sampled_indices, sampled_x = qi.predict_x(A, n_entries_x)
     print(sampled_x)
 
     assert np.all(sampled_indices == np.asarray([234, 106, 136, 54, 130, 36, 161, 150, 173, 32]))
@@ -143,10 +146,11 @@ def test_finding_largest_entries_b_underdetermined():
     r = 70
     c = 80
     n_samples = 100
-    n_entries_x = 0
     n_entries_b = 1000
     rng = np.random.RandomState(111)
-    _, _, sampled_indices, sampled_b = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng)
+    qi = QILinearEstimator(r, c, rank, n_samples, rng)
+    qi = qi.fit(A, b)
+    sampled_indices, sampled_b = qi.predict_b(A, n_entries_b)
 
     # Find most frequent outcomes
     unique_b_idx, counts = np.unique(sampled_indices, return_counts=True)
@@ -182,10 +186,11 @@ def test_finding_largest_entries_b():
     r = 70
     c = 80
     n_samples = 100
-    n_entries_x = 0
     n_entries_b = 1000
     rng = np.random.RandomState(111)
-    _, _, sampled_indices, sampled_b = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng)
+    qi = QILinearEstimator(r, c, rank, n_samples, rng)
+    qi = qi.fit(A, b)
+    sampled_indices, sampled_b = qi.predict_b(A, n_entries_b)
 
     # Find most frequent outcomes
     unique_b_idx, counts = np.unique(sampled_indices, return_counts=True)
@@ -222,9 +227,10 @@ def test_finding_largest_entries_x():
     c = 70
     n_samples = 100
     n_entries_x = 1000
-    n_entries_b = 0
     rng = np.random.RandomState(7)
-    sampled_indices, sampled_x, _, _ = qi.solve_qi(A, b, r, c, rank, n_samples, n_entries_x, n_entries_b, rng)
+    qi = QILinearEstimator(r, c, rank, n_samples, rng)
+    qi = qi.fit(A, b)
+    sampled_indices, sampled_x = qi.predict_x(A, n_entries_x)
 
     # Find most frequent outcomes
     unique_x_idx, counts = np.unique(sampled_indices, return_counts=True)

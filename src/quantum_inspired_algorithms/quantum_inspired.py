@@ -1,13 +1,13 @@
 import logging
-import warnings
 from typing import Callable
-from typing import Optional
 import numpy as np
 from numpy import linalg as la
 from numpy.typing import NDArray
 
 
-def compute_ls_probs(A) -> tuple[NDArray, NDArray, NDArray, NDArray, NDArray]:
+def compute_ls_probs(
+    A: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """Compute length-square (LS) probability distributions for sampling `A`.
 
     Args:
@@ -40,15 +40,15 @@ def compute_ls_probs(A) -> tuple[NDArray, NDArray, NDArray, NDArray, NDArray]:
 
 
 def compute_C_and_R(
-    A: NDArray,
+    A: NDArray[np.float64],
     r: int,
     c: int,
-    A_row_norms: NDArray,
-    A_ls_prob_rows: NDArray,
-    A_ls_prob_columns: NDArray,
-    A_frobenius: NDArray,
+    A_row_norms: NDArray[np.float64],
+    A_ls_prob_rows: NDArray[np.float64],
+    A_ls_prob_columns: NDArray[np.float64],
+    A_frobenius: NDArray[np.float64],
     rng: np.random.RandomState,
-) -> tuple[NDArray, NDArray, NDArray, NDArray, NDArray]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.uint32], NDArray[np.uint32]]:
     """Compute matrices `C` and `R` by sampling rows and columns of matrix `A`.
 
     Note: LS stands for length-square.
@@ -73,7 +73,7 @@ def compute_C_and_R(
     m_rows, n_cols = A.shape
 
     # Sample row indices
-    A_sampled_rows_idx = rng.choice(m_rows, r, replace=True, p=A_ls_prob_rows)
+    A_sampled_rows_idx = rng.choice(m_rows, r, replace=True, p=A_ls_prob_rows).astype(np.uint32)
 
     # Sample column indices
     A_sampled_columns_idx = np.zeros(c, dtype=np.uint32)
@@ -97,20 +97,20 @@ def compute_C_and_R(
 
 
 def estimate_lambdas(
-    A: NDArray,
-    b: NDArray,
+    A: NDArray[np.float64],
+    b: NDArray[np.float64],
     n_samples: int,
     rank: int,
-    w: NDArray,
-    sigma: NDArray,
-    A_sampled_rows_idx: NDArray,
-    A_row_norms: NDArray,
-    A_ls_prob_rows: NDArray,
-    A_ls_prob_columns: NDArray,
-    A_frobenius: NDArray,
+    w: NDArray[np.float64],
+    sigma: NDArray[np.float64],
+    A_sampled_rows_idx: NDArray[np.uint32],
+    A_row_norms: NDArray[np.float64],
+    A_ls_prob_rows: NDArray[np.float64],
+    A_ls_prob_columns: NDArray[np.float64],
+    A_frobenius: NDArray[np.float64],
     rng: np.random.RandomState,
     func: Callable[[float], float],
-) -> NDArray:
+) -> NDArray[np.float64]:
     """Estimate lambda coefficients.
 
     Args:
@@ -139,7 +139,7 @@ def estimate_lambdas(
     lambdas_realizations = np.zeros((n_realizations, rank))
     for realization_i in range(n_realizations):
         logging.info(f"---Realization {realization_i}")
-        for l in range(rank):
+        for ell in range(rank):
             # 1. Generate sample indices
             samples_i = []
             samples_j = []
@@ -157,7 +157,7 @@ def estimate_lambdas(
                 * A_frobenius
                 / (np.sqrt(r) * A_row_norms[A_sampled_rows_idx, None])
             )
-            v_approx = R.T @ (w[:, l] / sigma[l])
+            v_approx = R.T @ (w[:, ell] / sigma[ell])
 
             # Compute entries of outer product between `b` and `v_approx`
             outer_prod_b_v = np.squeeze(b[samples_i]) * v_approx
@@ -166,7 +166,7 @@ def estimate_lambdas(
             inner_prod = np.mean(A_frobenius**2 / A[samples_i, samples_j] * outer_prod_b_v)
 
             # Compute lambda
-            lambdas_realizations[realization_i, l] = inner_prod / sigma[l] / func(sigma[l])
+            lambdas_realizations[realization_i, ell] = inner_prod / sigma[ell] / func(sigma[ell])
 
     lambdas = np.median(lambdas_realizations, axis=0)
 
@@ -174,12 +174,12 @@ def estimate_lambdas(
 
 
 def sample_from_b(
-    A: NDArray,
-    A_sampled_columns_idx: NDArray,
-    A_column_norms: NDArray,
-    A_ls_prob_rows: NDArray,
-    A_frobenius: NDArray,
-    phi: NDArray,
+    A: NDArray[np.float64],
+    A_sampled_columns_idx: NDArray[np.uint32],
+    A_column_norms: NDArray[np.float64],
+    A_ls_prob_rows: NDArray[np.float64],
+    A_frobenius: NDArray[np.float64],
+    phi: NDArray[np.float64],
     phi_norm: float,
     rng: np.random.RandomState,
 ) -> tuple[int, float]:
@@ -219,12 +219,12 @@ def sample_from_b(
 
 
 def sample_from_x(
-    A: NDArray,
-    A_sampled_rows_idx: NDArray,
-    A_row_norms: NDArray,
-    R_ls_prob_columns: NDArray,
-    A_frobenius: NDArray,
-    omega: NDArray,
+    A: NDArray[np.float64],
+    A_sampled_rows_idx: NDArray[np.uint32],
+    A_row_norms: NDArray[np.float64],
+    R_ls_prob_columns: NDArray[np.float64],
+    A_frobenius: NDArray[np.float64],
+    omega: NDArray[np.float64],
     omega_norm: float,
     rng: np.random.RandomState,
 ) -> tuple[int, float]:
@@ -264,162 +264,3 @@ def sample_from_x(
         prob = (dot_prod_R_j_omega / (omega_norm * R_j_norm)) ** 2
         if rng.binomial(1, prob) == 1:
             return sample_j, dot_prod_R_j_omega
-
-
-def solve_qi(
-    A: NDArray,
-    b: NDArray,
-    r: int,
-    c: int,
-    rank: int,
-    n_samples: int,
-    n_entries_x: int,
-    n_entries_b: int,
-    rng: np.random.RandomState,
-    sigma_threshold: float = 1e-15,
-    A_sampling: Optional[NDArray] = None,
-    func: Optional[Callable[[float], float]] = None,
-) -> tuple[NDArray, NDArray, NDArray, NDArray]:
-    """Solves linear system of equations using a quantum-inspired algorithm.
-
-    Args:
-        A: coefficient matrix.
-        b: vector b.
-        r: number of rows to sample from A.
-        c: number of columns to sample from A.
-        rank: rank used to approximate matrix A.
-        n_samples: number of samples to estimate inner products.
-                   Note: the sampling is  performed from entries of `A`,
-                   so there are `A.shape[0] * A.shape[1]` possible entries.
-        n_entries_x: number of entries to be sampled from the solution vector `x`.
-                     Set this to 0 to skip this sampling step.
-        n_entries_b: number of entries to be sampled from the predicted `b`.
-        rng: random state.
-        sigma_threshold: the argument `rank` is recomputed in case it is higher
-                         the number of singular values below this threhold.
-        A_sampling: coefficient matrix to be used for sampling the predicted `b`.
-                    see argument `n_entries_b`. If None, it is assumed equal to
-                    argument `A`.
-        func: function to transform singular values when estimating lambda coefficients.
-              This can be used for Tikhonov regularization purposes.
-
-    Returns:
-        sampled indices for `x`
-        sampled entries for `x`
-        sampled indices for `b`
-        sampled entries for `b`
-    """
-    # Validate input
-    if rank <= 0:
-        raise ValueError("`rank` should be greater than 0")
-
-    if r <= rank or c <= rank:
-        raise ValueError("both `r` and `c` should be greater than `rank`")
-
-    if n_samples <= 1:
-        raise ValueError("`n_samples` should be greater than 1")
-
-    if sum([n_entries_x, n_entries_b]) == 0:
-        raise ValueError("`n_entries_x` or `n_entries_b` should be greater than 0")
-
-    if sigma_threshold <= 0:
-        raise ValueError("`sigma_threshold` should be greater than 0")
-
-    # 1. Generate length-square probability distributions to sample from matrix `A`
-    logging.info("1. Generate length-square probability distributions to sample from matrix `A`")
-    A_ls_prob_rows, A_ls_prob_columns, A_row_norms, _, A_frobenius = compute_ls_probs(A)
-
-    # 2. Build matrix `C` by sampling `r` rows and `c` columns
-    logging.info("2. Build matrix `C` by sampling `r` rows and `c` columns")
-    C, _, R_ls_prob_columns, A_sampled_rows_idx, A_sampled_columns_idx = compute_C_and_R(
-        A, r, c, A_row_norms, A_ls_prob_rows, A_ls_prob_columns, A_frobenius, rng
-    )
-
-    # 3. Compute the SVD of `C`
-    logging.info("3. Compute the SVD of `C`")
-    w_left, sigma, w_right_T = la.svd(C, full_matrices=False)
-
-    # Recompute rank
-    rank_recomputed = np.count_nonzero(sigma > sigma_threshold)
-    if rank_recomputed < rank:
-        message = f"desired rank: {rank}; recomputed: {rank_recomputed}"
-        warnings.warn(message, RuntimeWarning)
-        logging.warning(message)
-        rank = rank_recomputed
-
-    # 4. Estimate lambda coefficients
-    logging.info("4. Estimate lambda coefficients")
-    if func is None:
-        func = lambda arg: arg
-    lambdas = estimate_lambdas(
-        A,
-        b,
-        n_samples,
-        rank,
-        w_left,
-        sigma,
-        A_sampled_rows_idx,
-        A_row_norms,
-        A_ls_prob_rows,
-        A_ls_prob_columns,
-        A_frobenius,
-        rng,
-        func=func,
-    )
-
-    # 5. Sampled predicted `b`
-    sampled_indices_x, sampled_x, sampled_indices_b, sampled_b = np.array([]), np.array([]), np.array([]), np.array([])
-    if n_entries_b > 0:
-        logging.info("5. Sample predicted `b`")
-
-        if A_sampling is None:
-            A_sampling = A
-
-        # Compute `phi`
-        phi = w_right_T.T[:, :rank] @ lambdas
-        phi_norm = float(la.norm(phi))
-
-        # Sample entries of `b`
-        sampled_indices_b = np.zeros(n_entries_b, dtype=np.uint32)
-        sampled_b = np.zeros(n_entries_b)
-        A_s_ls_prob_rows, _, _, A_s_column_norms, A_s_frobenius = compute_ls_probs(A_sampling)
-        for t in range(n_entries_b):
-            sampled_indices_b[t], sampled_b[t] = sample_from_b(
-                A_sampling,
-                A_sampled_columns_idx,
-                A_s_column_norms,
-                A_s_ls_prob_rows,
-                A_s_frobenius,
-                phi,
-                phi_norm,
-                rng,
-            )
-            if (t + 1) % 100 == 0:
-                logging.info(f"---{t + 1} entries sampled out of {n_entries_b}")
-
-    # 6. Sample predicted `x`
-    if n_entries_x > 0:
-        logging.info("6. Sample predicted `x`")
-
-        # Compute `omega`
-        omega = w_left[:, :rank] @ (lambdas / sigma[:rank])
-        omega_norm = float(la.norm(omega))
-
-        # Sample entries of solution vector `x`
-        sampled_indices_x = np.zeros(n_entries_x, dtype=np.uint32)
-        sampled_x = np.zeros(n_entries_x)
-        for t in range(n_entries_x):
-            sampled_indices_x[t], sampled_x[t] = sample_from_x(
-                A,
-                A_sampled_rows_idx,
-                A_row_norms,
-                R_ls_prob_columns,
-                A_frobenius,
-                omega,
-                omega_norm,
-                rng,
-            )
-            if (t + 1) % 100 == 0:
-                logging.info(f"---{t + 1} entries sampled out of {n_entries_x}")
-
-    return sampled_indices_x, sampled_x, sampled_indices_b, sampled_b
