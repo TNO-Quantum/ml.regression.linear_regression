@@ -13,6 +13,14 @@ from quantum_inspired_algorithms.quantum_inspired import sample_from_b
 from quantum_inspired_algorithms.quantum_inspired import sample_from_x
 
 
+class EstimatorError(Exception):
+    """Module exception."""
+
+    def __init__(self, message: str):
+        """Init EstimatorError."""
+        super().__init__(message)
+
+
 class QILinearEstimator:
     """Quantum-inspired linear estimator."""
 
@@ -25,6 +33,7 @@ class QILinearEstimator:
         random_state: np.random.RandomState,
         sigma_threshold: float = 1e-15,
         func: Optional[Callable[[float], float]] = None,
+        fixed_columns_idx: Optional[list[int]] = None,
     ) -> None:
         """Init QILinearEstimator.
 
@@ -40,6 +49,7 @@ class QILinearEstimator:
                              the number of singular values below this threhold.
             func: function to transform singular values when estimating lambda coefficients.
                   This can be used for Tikhonov regularization purposes.
+            fixed_columns_idx: indices of columns that should always be considered when sampling.
         """
         self.r = r
         self.c = c
@@ -48,6 +58,7 @@ class QILinearEstimator:
         self.random_state = random_state
         self.sigma_threshold = sigma_threshold
         self.func = func
+        self.A_fixed_columns_idx = fixed_columns_idx
 
     def fit(
         self,
@@ -73,9 +84,16 @@ class QILinearEstimator:
         if self.sigma_threshold <= 0:
             raise ValueError("`sigma_threshold` should be greater than 0")
 
+        if self.A_fixed_columns_idx is None:
+            self.A_fixed_columns_idx_ = []
+        else:
+            self.A_fixed_columns_idx_ = self.A_fixed_columns_idx
+        if not all(0 <= fixed_idx < A.shape[1] for fixed_idx in self.A_fixed_columns_idx_):
+            raise ValueError("`fixed_columns_idx` contains indices that are out of range")
+
         # 1. Generate length-square probability distributions to sample from matrix `A`
         logging.info("1. Generate length-square probability distributions to sample from matrix `A`")
-        self.A_ls_prob_rows_, self.A_ls_prob_columns_, self.A_row_norms_, _, self.A_frobenius_ = compute_ls_probs(A)
+        self.A_ls_prob_rows_, self.A_ls_prob_columns_, self.A_row_norms_, _, self.A_frobenius_ = compute_ls_probs(A, [])
 
         # 2. Build matrix `C` by sampling `r` rows and `c` columns
         logging.info("2. Build matrix `C` by sampling `r` rows and `c` columns")
@@ -88,6 +106,7 @@ class QILinearEstimator:
             self.A_ls_prob_columns_,
             self.A_frobenius_,
             self.random_state,
+            self.A_fixed_columns_idx_,
         )
 
         # 3. Compute the SVD of `C`
@@ -126,10 +145,31 @@ class QILinearEstimator:
             self.A_ls_prob_columns_,
             self.A_frobenius_,
             self.random_state,
-            func=func,
+            func,
+            self.A_fixed_columns_idx_,
         )
 
         return self
+
+    def _check_is_fitted(self):
+        """Check if the `fit` method has been called."""
+        for attribute_name in [
+            "A_fixed_columns_idx_",
+            "A_ls_prob_rows_",
+            "A_ls_prob_columns_",
+            "A_row_norms_",
+            "A_frobenius_",
+            "R_ls_prob_columns_",
+            "A_sampled_rows_idx_",
+            "A_sampled_columns_idx_",
+            "w_left_",
+            "sigma_",
+            "w_right_T_",
+            "rank_",
+            "lambdas_",
+        ]:
+            if not hasattr(self, attribute_name):
+                raise EstimatorError("Please call `fit` before making predictions.")
 
     def predict_x(
         self,
@@ -146,6 +186,8 @@ class QILinearEstimator:
         Returns:
             Samples of predicted values and corresponding indices.
         """
+        self._check_is_fitted()
+
         if n_entries_x == 0:
             raise ValueError("`n_entries_x` should be greater than 0")
 
@@ -181,6 +223,9 @@ class QILinearEstimator:
     ) -> tuple[NDArray[np.uint32], NDArray[np.float64]]:
         """Predict `b` using quantum-inspired model.
 
+        Note that the columns of `A` in `self.A_fixed_columns_idx_` will
+        be ignored when computing the predictions.
+
         Args:
             A: coefficient matrix.
             n_entries_b: number of entries to be sampled from the predicted `b`.
@@ -188,6 +233,8 @@ class QILinearEstimator:
         Returns:
             Samples of predicted values and corresponding indices.
         """
+        self._check_is_fitted()
+
         if n_entries_b == 0:
             raise ValueError("`n_entries_b` should be greater than 0")
 
@@ -195,16 +242,24 @@ class QILinearEstimator:
 
         # Compute `phi`
         phi = self.w_right_T_.T[:, : self.rank_] @ self.lambdas_
-        phi_norm = float(la.norm(phi))
+
+        # Exclude fixed columns
+        if self.A_fixed_columns_idx_:
+            mask = np.isin(self.A_sampled_columns_idx_, np.asarray(self.A_fixed_columns_idx_), invert=True)
+            A_sampled_columns_idx = self.A_sampled_columns_idx_[mask]
+            phi = phi[mask]
+        else:
+            A_sampled_columns_idx = self.A_sampled_columns_idx_
 
         # Sample entries of `b`
+        phi_norm = float(la.norm(phi))
         sampled_indices_b = np.zeros(n_entries_b, dtype=np.uint32)
         sampled_b = np.zeros(n_entries_b)
-        A_s_ls_prob_rows, _, _, A_s_column_norms, A_s_frobenius = compute_ls_probs(A)
+        A_s_ls_prob_rows, _, _, A_s_column_norms, A_s_frobenius = compute_ls_probs(A, self.A_fixed_columns_idx_)
         for t in range(n_entries_b):
             sampled_indices_b[t], sampled_b[t] = sample_from_b(
                 A,
-                self.A_sampled_columns_idx_,
+                A_sampled_columns_idx,
                 A_s_column_norms,
                 A_s_ls_prob_rows,
                 A_s_frobenius,
