@@ -20,7 +20,6 @@ def _load_data(underdetermined: bool = False) -> tuple[NDArray[np.float64], NDAr
     m = 500
     n = 250
     A = rng.randint(low=-1, high=2, size=(m, n))
-    # A = rng.normal(0, 1, (m, n))
     U, S, V = np.linalg.svd(A, full_matrices=False)
     S[rank:] = 0
     A = U @ np.diag(S) @ V
