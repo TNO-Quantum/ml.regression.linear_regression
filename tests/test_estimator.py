@@ -164,17 +164,14 @@ def test_finding_largest_entries_b_underdetermined():
     qi = qi.fit(A, b)
     sampled_indices, sampled_b = qi.predict_b(A, n_entries_b)
 
-    # Find most frequent outcomes
-    unique_b_idx, counts = np.unique(sampled_indices, return_counts=True)
-    sort_idx = np.flip(np.argsort(counts))
-    b_idx = unique_b_idx[sort_idx][:top_size]
-
     # Compare results
     df = pd.DataFrame({"b_idx_samples": sampled_indices, "b_samples": sampled_b})
     df_mean = df.groupby("b_idx_samples")["b_samples"].mean()
     df_counts = df.groupby("b_idx_samples").count()
-    unique_sampled_indices = df_mean.keys()
+    unique_sampled_indices = np.asarray(df_mean.keys())
     unique_sampled_b = np.asarray(df_mean.values)
+    sort_idx = np.flip(np.argsort(np.abs(unique_sampled_b)))
+    b_idx = unique_sampled_indices[sort_idx][:top_size]
     n_matches = plot_solution(
         b,
         b_idx,
@@ -185,7 +182,7 @@ def test_finding_largest_entries_b_underdetermined():
         counts=np.squeeze(np.round(df_counts.values)),
     )
 
-    assert n_matches == 41
+    assert n_matches == 43
 
 
 def test_finding_largest_entries_b_underdetermined_fixed():
@@ -221,7 +218,7 @@ def test_finding_largest_entries_b_underdetermined_fixed():
     assert n_matches == 8
 
     # Solve using quantum-inspired algorithm (ignore fixed columns)
-    rank = 3
+    rank = 4
     r = 70
     c = 80
     n_samples = 100
@@ -231,16 +228,13 @@ def test_finding_largest_entries_b_underdetermined_fixed():
     qi = qi.fit(A, b)
     sampled_indices, sampled_b = qi.predict_b(A, n_entries_b)
 
-    # Find most frequent outcomes
-    unique_b_idx, counts = np.unique(sampled_indices, return_counts=True)
-    sort_idx = np.flip(np.argsort(counts))
-    b_idx = unique_b_idx[sort_idx][:top_size]
-
     # Compare results
     df = pd.DataFrame({"b_idx_samples": sampled_indices, "b_samples": sampled_b})
     df_mean = df.groupby("b_idx_samples")["b_samples"].mean()
-    unique_sampled_indices = df_mean.keys()
+    unique_sampled_indices = np.asarray(df_mean.keys())
     unique_sampled_b = np.asarray(df_mean.values)
+    sort_idx = np.flip(np.argsort(np.abs(unique_sampled_b)))
+    b_idx = unique_sampled_indices[sort_idx][:top_size]
     n_matches = plot_solution(
         b_without_fixed,
         b_idx,
@@ -249,10 +243,10 @@ def test_finding_largest_entries_b_underdetermined_fixed():
         solution=_normalize(unique_sampled_b),
     )
 
-    assert n_matches == 7
+    assert n_matches == 14
 
     # Solve using quantum-inspired algorithm (with fixed columns)
-    rank = 3
+    rank = 4
     r = 70
     c = 80
     n_samples = 100
@@ -262,16 +256,13 @@ def test_finding_largest_entries_b_underdetermined_fixed():
     qi = qi.fit(A, b)
     sampled_indices, sampled_b = qi.predict_b(A, n_entries_b)
 
-    # Find most frequent outcomes
-    unique_b_idx, counts = np.unique(sampled_indices, return_counts=True)
-    sort_idx = np.flip(np.argsort(counts))
-    b_idx = unique_b_idx[sort_idx][:top_size]
-
     # Compare results
     df = pd.DataFrame({"b_idx_samples": sampled_indices, "b_samples": sampled_b})
     df_mean = df.groupby("b_idx_samples")["b_samples"].mean()
-    unique_sampled_indices = df_mean.keys()
+    unique_sampled_indices = np.asarray(df_mean.keys())
     unique_sampled_b = np.asarray(df_mean.values)
+    sort_idx = np.flip(np.argsort(np.abs(unique_sampled_b)))
+    b_idx = unique_sampled_indices[sort_idx][:top_size]
     n_matches = plot_solution(
         b_without_fixed,
         b_idx,
@@ -280,7 +271,7 @@ def test_finding_largest_entries_b_underdetermined_fixed():
         solution=_normalize(unique_sampled_b),
     )
 
-    assert n_matches == 16
+    assert n_matches == 23
 
 
 def test_finding_largest_entries_b():
@@ -300,17 +291,14 @@ def test_finding_largest_entries_b():
     qi = qi.fit(A, b)
     sampled_indices, sampled_b = qi.predict_b(A, n_entries_b)
 
-    # Find most frequent outcomes
-    unique_b_idx, counts = np.unique(sampled_indices, return_counts=True)
-    sort_idx = np.flip(np.argsort(counts))
-    b_idx = unique_b_idx[sort_idx][:top_size]
-
     # Compare results
     df = pd.DataFrame({"b_idx_samples": sampled_indices, "b_samples": sampled_b})
     df_mean = df.groupby("b_idx_samples")["b_samples"].mean()
     df_counts = df.groupby("b_idx_samples").count()
-    unique_sampled_indices = df_mean.keys()
+    unique_sampled_indices = np.asarray(df_mean.keys())
     unique_sampled_b = np.asarray(df_mean.values)
+    sort_idx = np.flip(np.argsort(np.abs(unique_sampled_b)))
+    b_idx = unique_sampled_indices[sort_idx][:top_size]
     n_matches = plot_solution(
         b,
         b_idx,
@@ -321,7 +309,32 @@ def test_finding_largest_entries_b():
         counts=np.squeeze(np.round(df_counts.values)),
     )
 
-    assert n_matches == 17
+    assert n_matches == 24
+
+
+def test_pseudoinverse():
+    """Test pseudoinverse."""
+    # Load data
+    A, b, _ = _load_data()
+    rank = 3
+
+    # Solve using pseudoinverse
+    x_sol = pinv(A).dot(b)
+
+    # Solve using pseudoinverse II
+    U, S, V = np.linalg.svd(A, full_matrices=False)
+    A_pinv = V[:rank, :].T @ (np.diag(1 / S[:rank])) @ U[:, :rank].T
+    x_sol2 = A_pinv @ b
+
+    # Solve using pseudoinverse III
+    sigmas = S[:rank]
+    lambdas = []
+    for ell in range(rank):
+        lambdas.append(1 / (sigmas[ell]) ** 2 * np.sum(A * (np.outer(b, V[ell, :]))))
+    x_sol3 = np.squeeze(A.T @ (U[:, :rank] @ (np.asarray(lambdas)[:, None] / sigmas[:, None])))
+
+    assert np.allclose(x_sol, x_sol2)
+    assert np.allclose(x_sol, x_sol3)
 
 
 def test_finding_largest_entries_x():
@@ -341,11 +354,6 @@ def test_finding_largest_entries_x():
     qi = qi.fit(A, b)
     sampled_indices, sampled_x = qi.predict_x(A, n_entries_x)
 
-    # Find most frequent outcomes
-    unique_x_idx, counts = np.unique(sampled_indices, return_counts=True)
-    sort_idx = np.flip(np.argsort(counts))
-    x_idx = unique_x_idx[sort_idx][:top_size]
-
     # Solve using pseudoinverse
     x_sol = pinv(A).dot(b)
 
@@ -353,8 +361,10 @@ def test_finding_largest_entries_x():
     df = pd.DataFrame({"x_idx_samples": sampled_indices, "x_samples": sampled_x})
     df_mean = df.groupby("x_idx_samples")["x_samples"].mean()
     df_counts = df.groupby("x_idx_samples").count()
-    unique_sampled_indices = df_mean.keys()
+    unique_sampled_indices = np.asarray(df_mean.keys())
     unique_sampled_x = np.asarray(df_mean.values)
+    sort_idx = np.flip(np.argsort(np.abs(unique_sampled_x)))
+    x_idx = unique_sampled_indices[sort_idx][:top_size]
     n_matches = plot_solution(
         x_sol,
         x_idx,
@@ -365,7 +375,7 @@ def test_finding_largest_entries_x():
         counts=np.squeeze(np.round(df_counts.values)),
     )
 
-    assert n_matches == 20
+    assert n_matches == 21
 
 
 if __name__ == "__main__":
