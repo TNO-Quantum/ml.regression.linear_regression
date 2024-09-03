@@ -25,9 +25,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "numpy",
-    "pandas",
-    "seaborn",
+    "numpy==2.0.0",
+    "scipy==1.13.1",
+    "seaborn==0.13.2",
 ]
 description = "Quantum-inspired algorithms"
 keywords = []
