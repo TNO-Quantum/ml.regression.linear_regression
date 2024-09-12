@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import Optional
 import matplotlib
-import pandas as pd
 import numpy as np
+import pandas as pd
 import seaborn as sns
 
 matplotlib.use("Agg")
@@ -35,6 +35,38 @@ def _scatter_plot(data: pd.DataFrame):
     )
 
 
+def compute_n_matches(x_reference: NDArray, best_idx: NDArray, plot_name: Optional[str] = None) -> int:
+    """Compute number of matches."""
+    # Compute absolute value
+    x_reference = np.squeeze(np.abs(x_reference))
+
+    # Mark indices assumed to be best
+    marked_as_best = np.zeros(x_reference.size, dtype=bool)
+    marked_as_best[best_idx] = True
+
+    # Find mapping from index in sorted array to original index
+    sort_idx = np.flip(np.argsort(x_reference))
+
+    # Sort in descending order
+    sorted_marked_as_best = marked_as_best[sort_idx]
+    n_best_idx = len(best_idx)
+
+    # Compute number of matches
+    n_matches = int(np.sum(sorted_marked_as_best[:n_best_idx]))
+
+    # Plot (sorted) reference solution and best indices provided
+    if plot_name is not None:
+        sorted_x_known = x_reference[sort_idx]
+        sns.lineplot(sorted_x_known)
+        for idx, value in enumerate(sorted_marked_as_best):
+            if value:
+                plt.axvline(x=idx, color="red", linestyle="-", linewidth=0.2)
+        plt.title(f"{n_matches} out of {n_best_idx}")
+        _save_fig(f"{plot_name}_matches")
+
+    return n_matches
+
+
 def plot_solution(
     x_reference: NDArray,
     best_idx: NDArray,
@@ -45,29 +77,8 @@ def plot_solution(
     counts: Optional[NDArray] = None,
 ) -> int:
     """Plot (sorted) reference solution along with best indices provided."""
-    # Squeeze array
-    x_reference = np.squeeze(np.abs(x_reference))
-
-    # Define colors for plotting
-    colors = np.array(x_reference.size * ["blue"])
-    colors[best_idx] = "red"
-
-    # Find mapping from index in sorted array to original index
-    sort_idx = np.flip(np.argsort(x_reference))
-
-    # Sort in descending order
-    sorted_x_known = x_reference[sort_idx]
-    sorted_colors = colors[sort_idx]
-
-    # Plot (sorted) reference solution and best indices provided
-    sns.lineplot(sorted_x_known)
-    for idx, value in enumerate(sorted_colors):
-        if value == "red":
-            plt.axvline(x=idx, color=value, linestyle="-", linewidth=0.2)
-    n_best_idx = len(best_idx)
-    n_matches = np.sum(sorted_colors[:n_best_idx] == "red")
-    plt.title(f"{n_matches} out of {n_best_idx}")
-    _save_fig(f"{plot_name}_matches")
+    # Compute number of matches
+    n_matches = compute_n_matches(x_reference, best_idx, plot_name=plot_name)
 
     if solution is not None and expected_solution is not None:
         # Plot solution
@@ -81,4 +92,4 @@ def plot_solution(
         _scatter_plot(counts_df)
         _save_fig(f"{plot_name}_counts_scatter")
 
-    return int(n_matches)
+    return n_matches

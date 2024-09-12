@@ -81,8 +81,16 @@ def compute_C_and_R(
         # Sample row index uniformly at random
         i = rng.choice(A_sampled_rows_idx, replace=True)
 
-        # Sample column from LS distribution of row `A[i]`
+        # Sample column from LS distribution of row `i`
         A_sampled_columns_idx[j] = rng.choice(n_cols, 1, p=A_ls_prob_columns[i, :])[0]
+
+    # Discard duplicates and sort in asc order
+    A_sampled_rows_idx = np.unique(A_sampled_rows_idx)
+    A_sampled_columns_idx = np.unique(A_sampled_columns_idx)
+
+    # Recompute `r` and `c`
+    r = len(A_sampled_rows_idx)
+    c = len(A_sampled_columns_idx)
 
     # Build `R`
     R = A[A_sampled_rows_idx, :] * A_frobenius / (np.sqrt(r) * A_row_norms[A_sampled_rows_idx, None])

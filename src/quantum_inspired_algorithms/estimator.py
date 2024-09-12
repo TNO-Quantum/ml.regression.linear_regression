@@ -13,6 +13,14 @@ from quantum_inspired_algorithms.quantum_inspired import sample_from_b
 from quantum_inspired_algorithms.quantum_inspired import sample_from_x
 
 
+class EstimatorError(Exception):
+    """Module exception."""
+
+    def __init__(self, message: str):
+        """Init EstimatorError."""
+        super().__init__(message)
+
+
 class QILinearEstimator:
     """Quantum-inspired linear estimator."""
 
@@ -126,10 +134,29 @@ class QILinearEstimator:
             self.A_ls_prob_columns_,
             self.A_frobenius_,
             self.random_state,
-            func=func,
+            func,
         )
 
         return self
+
+    def _check_is_fitted(self):
+        """Check if the `fit` method has been called."""
+        for attribute_name in [
+            "A_ls_prob_rows_",
+            "A_ls_prob_columns_",
+            "A_row_norms_",
+            "A_frobenius_",
+            "R_ls_prob_columns_",
+            "A_sampled_rows_idx_",
+            "A_sampled_columns_idx_",
+            "w_left_",
+            "sigma_",
+            "w_right_T_",
+            "rank_",
+            "lambdas_",
+        ]:
+            if not hasattr(self, attribute_name):
+                raise EstimatorError("Please call `fit` before making predictions.")
 
     def predict_x(
         self,
@@ -146,6 +173,8 @@ class QILinearEstimator:
         Returns:
             Samples of predicted values and corresponding indices.
         """
+        self._check_is_fitted()
+
         if n_entries_x == 0:
             raise ValueError("`n_entries_x` should be greater than 0")
 
@@ -188,6 +217,8 @@ class QILinearEstimator:
         Returns:
             Samples of predicted values and corresponding indices.
         """
+        self._check_is_fitted()
+
         if n_entries_b == 0:
             raise ValueError("`n_entries_b` should be greater than 0")
 
@@ -195,9 +226,9 @@ class QILinearEstimator:
 
         # Compute `phi`
         phi = self.w_right_T_.T[:, : self.rank_] @ self.lambdas_
-        phi_norm = float(la.norm(phi))
 
         # Sample entries of `b`
+        phi_norm = float(la.norm(phi))
         sampled_indices_b = np.zeros(n_entries_b, dtype=np.uint32)
         sampled_b = np.zeros(n_entries_b)
         A_s_ls_prob_rows, _, _, A_s_column_norms, A_s_frobenius = compute_ls_probs(A)
