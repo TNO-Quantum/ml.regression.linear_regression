@@ -7,13 +7,11 @@ from numpy.typing import NDArray
 
 def compute_ls_probs(
     A: NDArray[np.float64],
-    ignore_columns_idx: list[int],
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """Compute length-square (LS) probability distributions for sampling `A`.
 
     Args:
         A: coefficient matrix.
-        ignore_columns_idx: indices of columns whose LS probability should be forced to be zero.
 
     Returns:
         LS probability distribution for rows,
@@ -22,42 +20,21 @@ def compute_ls_probs(
         column norms,
         Frobenius norm
     """
-    if ignore_columns_idx:
-        # Compute row norms
-        mask = np.ones(A.shape[1], dtype=bool)
-        mask[ignore_columns_idx] = False
-        A_row_norms = la.norm(A[:, mask], axis=1)
-        A_row_norms_squared = A_row_norms**2
+    # Compute row norms
+    A_row_norms = la.norm(A, axis=1)
+    A_row_norms_squared = A_row_norms**2
 
-        # Compute column norms
-        A_column_norms = la.norm(A, axis=0)
-        A_column_norms[ignore_columns_idx] = 0
+    # Compute column norms
+    A_column_norms = la.norm(A, axis=0)
 
-        # Compute Frobenius norm
-        A_frobenius = np.sqrt(np.sum(A_row_norms_squared))
+    # Compute Frobenius norm
+    A_frobenius = np.sqrt(np.sum(A_row_norms_squared))
 
-        # Compute LS probabilities for rows
-        A_ls_prob_rows = A_row_norms_squared / A_frobenius**2
+    # Compute LS probabilities for rows
+    A_ls_prob_rows = A_row_norms_squared / A_frobenius**2
 
-        # Compute LS probabilities for columns
-        A_ls_prob_columns = A**2 / A_row_norms_squared[:, None]
-        A_ls_prob_columns[:, ignore_columns_idx] = 0
-    else:
-        # Compute row norms
-        A_row_norms = la.norm(A, axis=1)
-        A_row_norms_squared = A_row_norms**2
-
-        # Compute column norms
-        A_column_norms = la.norm(A, axis=0)
-
-        # Compute Frobenius norm
-        A_frobenius = np.sqrt(np.sum(A_row_norms_squared))
-
-        # Compute LS probabilities for rows
-        A_ls_prob_rows = A_row_norms_squared / A_frobenius**2
-
-        # Compute LS probabilities for columns
-        A_ls_prob_columns = A**2 / A_row_norms_squared[:, None]
+    # Compute LS probabilities for columns
+    A_ls_prob_columns = A**2 / A_row_norms_squared[:, None]
 
     return A_ls_prob_rows, A_ls_prob_columns, A_row_norms, A_column_norms, A_frobenius
 
@@ -71,7 +48,6 @@ def compute_C_and_R(
     A_ls_prob_columns: NDArray[np.float64],
     A_frobenius: NDArray[np.float64],
     rng: np.random.RandomState,
-    A_fixed_columns_idx: list[int],
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.uint32], NDArray[np.uint32]]:
     """Compute matrices `C` and `R` by sampling rows and columns of matrix `A`.
 
@@ -86,8 +62,6 @@ def compute_C_and_R(
         A_ls_prob_columns: column LS probability distribution of `A`.
         A_frobenius: Frobenius norm of `A`.
         rng: random state.
-        A_fixed_columns_idx: indices of columns that should always be considered.
-                             Columns excluded from this list will be randomly selected.
 
     Returns:
         matrix `C`,
@@ -102,16 +76,13 @@ def compute_C_and_R(
     A_sampled_rows_idx = rng.choice(m_rows, r, replace=True, p=A_ls_prob_rows).astype(np.uint32)
 
     # Sample column indices
-    A_sampled_columns_idx = np.zeros(c + len(A_fixed_columns_idx), dtype=np.uint32)
+    A_sampled_columns_idx = np.zeros(c, dtype=np.uint32)
     for j in range(c):
         # Sample row index uniformly at random
         i = rng.choice(A_sampled_rows_idx, replace=True)
 
         # Sample column from LS distribution of row `i`
         A_sampled_columns_idx[j] = rng.choice(n_cols, 1, p=A_ls_prob_columns[i, :])[0]
-
-    if A_fixed_columns_idx:
-        A_sampled_columns_idx[c:] = A_fixed_columns_idx
 
     # Discard duplicates and sort in asc order
     A_sampled_rows_idx = np.unique(A_sampled_rows_idx)
@@ -147,7 +118,6 @@ def estimate_lambdas(
     A_frobenius: NDArray[np.float64],
     rng: np.random.RandomState,
     func: Callable[[float], float],
-    A_fixed_columns_idx: list[int],
 ) -> NDArray[np.float64]:
     """Estimate lambda coefficients.
 
@@ -167,8 +137,6 @@ def estimate_lambdas(
         A_frobenius: Frobenius norm of `A`.
         rng: random state.
         func: function to transform singular values when estimating lambda coefficients.
-        A_fixed_columns_idx: indices of columns that should always be considered.
-                             Columns excluded from this list will be randomly selected.
 
     Returns:
         lambda coefficients
@@ -183,27 +151,11 @@ def estimate_lambdas(
             # 1. Generate sample indices
             samples_i = []
             samples_j = []
-            if not A_fixed_columns_idx:
-                for _ in range(n_samples):
-                    i = rng.choice(m_rows, 1, replace=True, p=A_ls_prob_rows)[0]
-                    j = rng.choice(n_cols, 1, p=A_ls_prob_columns[i])[0]
-                    samples_i.append(i)
-                    samples_j.append(j)
-            else:
-                percentage_of_fixed = len(A_fixed_columns_idx) / A.shape[1]
-                n_samples_nonfixed = int((1 - percentage_of_fixed) * n_samples)
-                for _ in range(n_samples_nonfixed):
-                    i = rng.choice(m_rows, 1, replace=True, p=A_ls_prob_rows)[0]
-                    j = rng.choice(n_cols, 1, p=A_ls_prob_columns[i])[0]
-                    samples_i.append(i)
-                    samples_j.append(j)
-
-                n_samples_per_fixed_column = int(percentage_of_fixed * n_samples / len(A_fixed_columns_idx))
-                for j in A_fixed_columns_idx:
-                    for _ in range(n_samples_per_fixed_column):
-                        i = rng.choice(m_rows, 1, replace=True, p=A_ls_prob_rows)[0]
-                    samples_i.append(i)
-                    samples_j.append(j)
+            for _ in range(n_samples):
+                i = rng.choice(m_rows, 1, replace=True, p=A_ls_prob_rows)[0]
+                j = rng.choice(n_cols, 1, p=A_ls_prob_columns[i])[0]
+                samples_i.append(i)
+                samples_j.append(j)
 
             # 2. Approximate lambda using Monte Carlo estimation
 

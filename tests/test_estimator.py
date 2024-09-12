@@ -1,4 +1,3 @@
-import copy
 import logging
 from typing import Any
 import numpy as np
@@ -185,95 +184,6 @@ def test_finding_largest_entries_b_underdetermined():
     assert n_matches == 43
 
 
-def test_finding_largest_entries_b_underdetermined_fixed():
-    """Test quantum-inspired least squares with fixed columns."""
-    # Generate data
-    A, b, x = _load_data(underdetermined=True)
-    top_size = 25
-
-    fixed_columns_idx = list(range(2))
-    rng = np.random.RandomState(9)
-    A[:, fixed_columns_idx] = rng.randint(low=1, high=3, size=(A.shape[0], len(fixed_columns_idx)))
-    A = A / norm(A, axis=0)[None, :]
-    x[fixed_columns_idx] = 80
-    b = A @ x
-    x[fixed_columns_idx] = 0
-    b_without_fixed = A @ x
-
-    # Solve using pseudoinverse
-    A_zeroed_fixed_columns = copy.deepcopy(A)
-    A_zeroed_fixed_columns[:, fixed_columns_idx] = 0
-    b_without_fixed_pinv = A @ pinv(A_zeroed_fixed_columns).dot(b)
-    b_without_fixed_pinv_idx = np.flip(np.argsort(np.abs(b_without_fixed_pinv)))[:top_size]
-
-    # Compare results
-    n_matches = plot_solution(
-        b_without_fixed,
-        b_without_fixed_pinv_idx,
-        "test_finding_largest_entries_b_underdetermined_fixed_pinv",
-        expected_solution=_normalize(b_without_fixed),
-        solution=_normalize(b_without_fixed_pinv),
-    )
-
-    assert n_matches == 8
-
-    # Solve using quantum-inspired algorithm (ignore fixed columns)
-    rank = 4
-    r = 70
-    c = 80
-    n_samples = 100
-    n_entries_b = 1000
-    rng = np.random.RandomState(111)
-    qi = QILinearEstimator(r, c, rank, n_samples, rng)
-    qi = qi.fit(A, b)
-    sampled_indices, sampled_b = qi.predict_b(A, n_entries_b)
-
-    # Compare results
-    df = pd.DataFrame({"b_idx_samples": sampled_indices, "b_samples": sampled_b})
-    df_mean = df.groupby("b_idx_samples")["b_samples"].mean()
-    unique_sampled_indices = np.asarray(df_mean.keys())
-    unique_sampled_b = np.asarray(df_mean.values)
-    sort_idx = np.flip(np.argsort(np.abs(unique_sampled_b)))
-    b_idx = unique_sampled_indices[sort_idx][:top_size]
-    n_matches = plot_solution(
-        b_without_fixed,
-        b_idx,
-        "test_finding_largest_entries_b_underdetermined_fixed_qi_ignore_fixed",
-        expected_solution=_normalize(b_without_fixed[unique_sampled_indices]),
-        solution=_normalize(unique_sampled_b),
-    )
-
-    assert n_matches == 14
-
-    # Solve using quantum-inspired algorithm (with fixed columns)
-    rank = 4
-    r = 70
-    c = 80
-    n_samples = 100
-    n_entries_b = 1000
-    rng = np.random.RandomState(111)
-    qi = QILinearEstimator(r, c, rank, n_samples, rng, fixed_columns_idx=fixed_columns_idx)
-    qi = qi.fit(A, b)
-    sampled_indices, sampled_b = qi.predict_b(A, n_entries_b)
-
-    # Compare results
-    df = pd.DataFrame({"b_idx_samples": sampled_indices, "b_samples": sampled_b})
-    df_mean = df.groupby("b_idx_samples")["b_samples"].mean()
-    unique_sampled_indices = np.asarray(df_mean.keys())
-    unique_sampled_b = np.asarray(df_mean.values)
-    sort_idx = np.flip(np.argsort(np.abs(unique_sampled_b)))
-    b_idx = unique_sampled_indices[sort_idx][:top_size]
-    n_matches = plot_solution(
-        b_without_fixed,
-        b_idx,
-        "test_finding_largest_entries_b_underdetermined_fixed_qi",
-        expected_solution=_normalize(b_without_fixed[unique_sampled_indices]),
-        solution=_normalize(unique_sampled_b),
-    )
-
-    assert n_matches == 23
-
-
 def test_finding_largest_entries_b():
     """Test quantum-inspired least squares."""
     # Load data
@@ -379,4 +289,4 @@ def test_finding_largest_entries_x():
 
 
 if __name__ == "__main__":
-    test_finding_largest_entries_b_underdetermined_fixed()
+    test_finding_largest_entries_b()
