@@ -7,11 +7,17 @@ def test_compute_ls_probs():
     """Test LS probabilities."""
     A = np.arange(100, dtype=np.float64).reshape((10, 10))
 
-    A_ls_prob_rows, A_ls_prob_columns, _, _, _ = compute_ls_probs(A)
+    A_ls_prob_rows, A_ls_prob_columns_2d, A_ls_prob_columns, A_ls_prob_rows_2d, _ = compute_ls_probs(A)
+
     assert np.allclose(np.sum(A_ls_prob_rows), 1)
-    assert np.all(np.allclose(np.sum(A_ls_prob_columns, axis=1), 1))
+    assert np.all(np.allclose(np.sum(A_ls_prob_columns_2d, axis=1), 1))
     assert np.all(A_ls_prob_rows > -1e-8)
+    assert np.all(A_ls_prob_columns_2d > -1e-8)
+
+    assert np.allclose(np.sum(A_ls_prob_columns), 1)
+    assert np.all(np.allclose(np.sum(A_ls_prob_rows_2d, axis=0), 1))
     assert np.all(A_ls_prob_columns > -1e-8)
+    assert np.all(A_ls_prob_rows_2d > -1e-8)
 
 
 if __name__ == "__main__":

@@ -1,13 +1,21 @@
 import logging
+import warnings
 from typing import Callable
 import numpy as np
 from numpy import linalg as la
 from numpy.typing import NDArray
+from quantum_inspired_algorithms.sketching import Sketcher
 
 
 def compute_ls_probs(
     A: NDArray[np.float64],
-) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+) -> tuple[
+    NDArray[np.float64],
+    NDArray[np.float64],
+    NDArray[np.float64],
+    NDArray[np.float64],
+    NDArray[np.float64],
+]:
     """Compute length-square (LS) probability distributions for sampling `A`.
 
     Args:
@@ -15,9 +23,9 @@ def compute_ls_probs(
 
     Returns:
         LS probability distribution for rows,
+        LS probability distribution for columns (2D),
         LS probability distribution for columns,
-        row norms,
-        column norms,
+        LS probability distribution for rows (2D),
         Frobenius norm
     """
     # Compute row norms
@@ -26,6 +34,7 @@ def compute_ls_probs(
 
     # Compute column norms
     A_column_norms = la.norm(A, axis=0)
+    A_column_norms_squared = A_column_norms**2
 
     # Compute Frobenius norm
     A_frobenius = np.sqrt(np.sum(A_row_norms_squared))
@@ -34,74 +43,21 @@ def compute_ls_probs(
     A_ls_prob_rows = A_row_norms_squared / A_frobenius**2
 
     # Compute LS probabilities for columns
-    A_ls_prob_columns = A**2 / A_row_norms_squared[:, None]
+    A_ls_prob_columns_2d = A**2 / A_row_norms_squared[:, None]
 
-    return A_ls_prob_rows, A_ls_prob_columns, A_row_norms, A_column_norms, A_frobenius
+    # Compute LS probabilities for columns
+    A_ls_prob_columns = A_column_norms_squared / A_frobenius**2
 
+    # Compute LS probabilities for rows
+    A_ls_prob_rows_2d = A**2 / A_column_norms_squared[None, :]
 
-def compute_C_and_R(
-    A: NDArray[np.float64],
-    r: int,
-    c: int,
-    A_row_norms: NDArray[np.float64],
-    A_ls_prob_rows: NDArray[np.float64],
-    A_ls_prob_columns: NDArray[np.float64],
-    A_frobenius: NDArray[np.float64],
-    rng: np.random.RandomState,
-) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.uint32], NDArray[np.uint32]]:
-    """Compute matrices `C` and `R` by sampling rows and columns of matrix `A`.
-
-    Note: LS stands for length-square.
-
-    Args:
-        A: coefficient matrix.
-        r: number of rows to sample.
-        c: number of columns to sample.
-        A_row_norms: norm of the rows of `A`.
-        A_ls_prob_rows: row LS probability distribution of `A`.
-        A_ls_prob_columns: column LS probability distribution of `A`.
-        A_frobenius: Frobenius norm of `A`.
-        rng: random state.
-
-    Returns:
-        matrix `C`,
-        matrix `R`,
-        column LS probability distribution for matrix `R`,
-        sampled row indices,
-        sampled column indices
-    """
-    m_rows, n_cols = A.shape
-
-    # Sample row indices
-    A_sampled_rows_idx = rng.choice(m_rows, r, replace=True, p=A_ls_prob_rows).astype(np.uint32)
-
-    # Sample column indices
-    A_sampled_columns_idx = np.zeros(c, dtype=np.uint32)
-    for j in range(c):
-        # Sample row index uniformly at random
-        i = rng.choice(A_sampled_rows_idx, replace=True)
-
-        # Sample column from LS distribution of row `i`
-        A_sampled_columns_idx[j] = rng.choice(n_cols, 1, p=A_ls_prob_columns[i, :])[0]
-
-    # Discard duplicates and sort in asc order
-    A_sampled_rows_idx = np.unique(A_sampled_rows_idx)
-    A_sampled_columns_idx = np.unique(A_sampled_columns_idx)
-
-    # Recompute `r` and `c`
-    r = len(A_sampled_rows_idx)
-    c = len(A_sampled_columns_idx)
-
-    # Build `R`
-    R = A[A_sampled_rows_idx, :] * A_frobenius / (np.sqrt(r) * A_row_norms[A_sampled_rows_idx, None])
-
-    # Build `C`
-    C = R[:, A_sampled_columns_idx] * A_frobenius / (np.sqrt(c) * la.norm(R[:, A_sampled_columns_idx], axis=0))
-
-    # Build LS distribution to sample columns from matrix `R`
-    R_ls_prob_columns = R**2 / la.norm(R, axis=1)[:, None] ** 2
-
-    return C, R, R_ls_prob_columns, A_sampled_rows_idx, A_sampled_columns_idx
+    return (
+        A_ls_prob_rows,
+        A_ls_prob_columns_2d,
+        A_ls_prob_columns,
+        A_ls_prob_rows_2d,
+        A_frobenius,
+    )
 
 
 def estimate_lambdas(
@@ -111,8 +67,7 @@ def estimate_lambdas(
     rank: int,
     w: NDArray[np.float64],
     sigma: NDArray[np.float64],
-    A_sampled_rows_idx: NDArray[np.uint32],
-    A_row_norms: NDArray[np.float64],
+    sketcher: Sketcher,
     A_ls_prob_rows: NDArray[np.float64],
     A_ls_prob_columns: NDArray[np.float64],
     A_frobenius: NDArray[np.float64],
@@ -130,10 +85,9 @@ def estimate_lambdas(
         rank: rank used to approximate matrix `A`.
         w: left-singular vector of `C`.
         sigma: singular values of `C`.
-        A_sampled_rows_idx: indices of the `r` sampled rows of matrix A
-        A_row_norms: norm of the rows of `A`.
+        sketcher: sketcher to left project `A`.
         A_ls_prob_rows: row LS probability distribution of `A`.
-        A_ls_prob_columns: column LS probability distribution of `A`.
+        A_ls_prob_columns: column LS probability distribution of `A` (2D).
         A_frobenius: Frobenius norm of `A`.
         rng: random state.
         func: function to transform singular values when estimating lambda coefficients.
@@ -142,7 +96,6 @@ def estimate_lambdas(
         lambda coefficients
     """
     m_rows, n_cols = A.shape
-    r = len(A_sampled_rows_idx)
     n_realizations = 10
     lambdas_realizations = np.zeros((n_realizations, rank))
     for realization_i in range(n_realizations):
@@ -160,11 +113,7 @@ def estimate_lambdas(
             # 2. Approximate lambda using Monte Carlo estimation
 
             # Estimate right-singular vector
-            R = (
-                A[A_sampled_rows_idx[:, None], np.asarray(samples_j)[None, :]]
-                * A_frobenius
-                / (np.sqrt(r) * A_row_norms[A_sampled_rows_idx, None])
-            )
+            R = sketcher.left_project(A[:, np.asarray(samples_j)])
             v_approx = R.T @ (w[:, ell] / sigma[ell])
 
             # Compute entries of outer product between `b` and `v_approx`
@@ -183,37 +132,32 @@ def estimate_lambdas(
 
 def sample_from_b(
     A: NDArray[np.float64],
-    A_sampled_columns_idx: NDArray[np.uint32],
-    A_column_norms: NDArray[np.float64],
-    A_ls_prob_rows: NDArray[np.float64],
-    A_frobenius: NDArray[np.float64],
+    sketcher: Sketcher,
     phi: NDArray[np.float64],
     phi_norm: float,
     rng: np.random.RandomState,
+    max_n_sampling_attempts: int = int(1e5),
 ) -> tuple[int, float]:
     """Perform length-square (LS) sampling from the predicted `b`.
 
     Args:
         A: coefficient matrix.
-        A_sampled_columns_idx: indices of the `c` sampled rows of matrix A.
-        A_column_norms: norm of the columns of `A`.
-        A_ls_prob_rows: row LS probability distribution of `A`.
-        A_frobenius: Frobenius norm of `A`.
+        sketcher: sketcher to left project `A` and sample its rows.
         phi: vector phi.
         phi_norm: norm of `phi`.
         rng: random state.
+        max_n_sampling_attempts: maximum number of sampling attempts.
 
     Returns:
         index of the sampled entry,
         entry value
     """
-    m_rows = A.shape[0]
-    c = len(A_sampled_columns_idx)
-    C = A[:, A_sampled_columns_idx] * A_frobenius / (np.sqrt(c) * A_column_norms[None, A_sampled_columns_idx])
+    C = sketcher.right_project(A)
+    sketcher.set_up_row_sampler(A)
 
-    while True:
-        # Sample column index uniformly at random
-        sample_i = rng.choice(m_rows, 1, replace=True, p=A_ls_prob_rows)[0]
+    for _ in range(max_n_sampling_attempts):
+        # Sample row index
+        sample_i = sketcher.sample_row_idx(rng)
 
         # Sample row of `C`
         C_i = C[sample_i, :]
@@ -225,43 +169,43 @@ def sample_from_b(
         if rng.binomial(1, prob) == 1:
             return sample_i, dot_prod_C_i_omega
 
+    message = (
+        f"Maximum number of sampling attempts ({max_n_sampling_attempts}) exceeded. Returning sample from last attempt."
+    )
+    warnings.warn(message, RuntimeWarning)
+    logging.warning(message)
+
+    return sample_i, dot_prod_C_i_omega
+
 
 def sample_from_x(
     A: NDArray[np.float64],
-    A_sampled_rows_idx: NDArray[np.uint32],
-    A_row_norms: NDArray[np.float64],
-    R_ls_prob_columns: NDArray[np.float64],
-    A_frobenius: NDArray[np.float64],
+    sketcher: Sketcher,
     omega: NDArray[np.float64],
     omega_norm: float,
     rng: np.random.RandomState,
+    max_n_sampling_attempts: int = int(1e5),
 ) -> tuple[int, float]:
     """Perform length-square (LS) sampling from the solution vector.
 
     Args:
         A: coefficient matrix.
-        A_sampled_rows_idx: indices of the `r` sampled rows of matrix A.
-        A_row_norms: norm of the rows of `A`.
-        R_ls_prob_columns: column LS probability distribution of `R`.
-        A_frobenius: Frobenius norm of `A`.
+        sketcher: sketcher to left project `A` and sample its columns.
         omega: vector omega.
         omega_norm: norm of `omega`.
         rng: random state.
+        max_n_sampling_attempts: maximum number of sampling attempts.
 
     Returns:
         index of the sampled entry,
         entry value
     """
-    n_cols = A.shape[1]
-    r = len(A_sampled_rows_idx)
-    R = A[A_sampled_rows_idx, :] * A_frobenius / (np.sqrt(r) * A_row_norms[A_sampled_rows_idx, None])
+    R = sketcher.left_project(A)
+    sketcher.set_up_column_sampler(A)
 
-    while True:
-        # Sample row index uniformly at random
-        sample_i = rng.choice(r)
-
-        # Sample column index from LS distribution of corresponding row
-        sample_j = rng.choice(n_cols, 1, p=R_ls_prob_columns[sample_i])[0]
+    for _ in range(max_n_sampling_attempts):
+        # Sample column index
+        sample_j = sketcher.sample_column_idx(rng)
 
         # Sample column of `R`
         R_j = R[:, sample_j]
@@ -272,3 +216,11 @@ def sample_from_x(
         prob = (dot_prod_R_j_omega / (omega_norm * R_j_norm)) ** 2
         if rng.binomial(1, prob) == 1:
             return sample_j, dot_prod_R_j_omega
+
+    message = (
+        f"Maximum number of sampling attempts ({max_n_sampling_attempts}) exceeded. Returning sample from last attempt."
+    )
+    warnings.warn(message, RuntimeWarning)
+    logging.warning(message)
+
+    return sample_j, dot_prod_R_j_omega

@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 import numpy as np
 import pandas as pd
 import pytest  # noqa: F401
@@ -18,7 +17,7 @@ def _load_data(underdetermined: bool = False) -> tuple[NDArray[np.float64], NDAr
     rank = 3
     m = 500
     n = 250
-    A = rng.randint(low=-1, high=2, size=(m, n))
+    A = rng.normal(0, 1, (m, n))
     U, S, V = np.linalg.svd(A, full_matrices=False)
     S[rank:] = 0
     A = U @ np.diag(S) @ V
@@ -28,10 +27,6 @@ def _load_data(underdetermined: bool = False) -> tuple[NDArray[np.float64], NDAr
     b = A @ x
 
     return A, b, x
-
-
-def _normalize(array: NDArray[Any]) -> NDArray[np.float64]:
-    return array / norm(array)
 
 
 def test_solve_qi():
@@ -52,20 +47,20 @@ def test_solve_qi():
 
     print(sampled_indices)
     print(sampled_x)
-    assert np.all(sampled_indices == np.asarray([7, 231, 130, 140, 151, 40, 232, 228, 203, 63]))
+    assert np.all(sampled_indices == np.asarray([234, 106, 136, 54, 130, 36, 161, 150, 173, 32]))
     assert np.allclose(
         sampled_x,
         [
-            0.03417937,
-            -0.08006763,
-            -0.11710657,
-            -0.07868093,
-            -0.10553537,
-            -0.04694688,
-            -0.10450383,
-            0.03896918,
-            0.03279467,
-            -0.08570982,
+            -0.13825295,
+            0.06593373,
+            -0.08765071,
+            -0.02747893,
+            0.18578372,
+            -0.23101082,
+            0.17040479,
+            0.12723163,
+            0.19693845,
+            0.21950633,
         ],
     )
 
@@ -88,20 +83,20 @@ def test_solve_qi_b():
 
     print(sampled_indices)
     print(sampled_b)
-    assert np.all(sampled_indices == np.asarray([416, 359, 326, 200, 287, 295, 241, 374, 444, 305]))
+    assert np.all(sampled_indices == np.asarray([91, 295, 326, 83, 282, 55, 447, 268, 156, 393]))
     assert np.allclose(
         sampled_b,
         [
-            1.32662421,
-            -3.13238187,
-            1.20473695,
-            1.92923047,
-            0.76955249,
-            1.39890586,
-            0.82789967,
-            -3.11694485,
-            1.21146775,
-            -1.49789864,
+            -3.18036958,
+            -1.12204103,
+            -4.5962418,
+            -1.18912406,
+            -4.92860809,
+            3.69603232,
+            -2.04046866,
+            7.99696582,
+            -6.82906746,
+            -3.55111518,
         ],
     )
 
@@ -128,20 +123,20 @@ def test_solve_qi_ridge():
 
     print(sampled_indices)
     print(sampled_x)
-    assert np.all(sampled_indices == np.asarray([7, 231, 130, 140, 151, 40, 232, 228, 203, 63]))
+    assert np.all(sampled_indices == np.asarray([234, 106, 136, 54, 130, 36, 161, 150, 173, 32]))
     assert np.allclose(
         sampled_x,
         [
-            0.03416916,
-            -0.08004339,
-            -0.11707113,
-            -0.07865541,
-            -0.10550235,
-            -0.04693136,
-            -0.10447066,
-            0.03895664,
-            0.03278557,
-            -0.0856838,
+            -0.13821783,
+            0.06591698,
+            -0.08762728,
+            -0.02747263,
+            0.18573576,
+            -0.23094832,
+            0.17035964,
+            0.12719866,
+            0.1968863,
+            0.21944595,
         ],
     )
 
@@ -175,13 +170,13 @@ def test_finding_largest_entries_b_underdetermined():
         b,
         b_idx,
         "test_finding_largest_entries_b_underdetermined",
-        expected_solution=_normalize(b)[unique_sampled_indices],
-        solution=_normalize(unique_sampled_b),
+        expected_solution=b[unique_sampled_indices],
+        solution=unique_sampled_b,
         expected_counts=n_entries_b * np.abs(b / norm(b))[unique_sampled_indices] ** 2,
         counts=np.squeeze(np.round(df_counts.values)),
     )
 
-    assert n_matches == 43
+    assert n_matches == 48
 
 
 def test_finding_largest_entries_b():
@@ -213,13 +208,13 @@ def test_finding_largest_entries_b():
         b,
         b_idx,
         "test_finding_largest_entries_b",
-        expected_solution=_normalize(b)[unique_sampled_indices],
-        solution=_normalize(unique_sampled_b),
+        expected_solution=b[unique_sampled_indices],
+        solution=unique_sampled_b,
         expected_counts=n_entries_b * np.abs(b / norm(b))[unique_sampled_indices] ** 2,
         counts=np.squeeze(np.round(df_counts.values)),
     )
 
-    assert n_matches == 24
+    assert n_matches == 23
 
 
 def test_pseudoinverse():
@@ -279,14 +274,14 @@ def test_finding_largest_entries_x():
         x_sol,
         x_idx,
         "test_finding_largest_entries_x",
-        expected_solution=_normalize(x_sol)[unique_sampled_indices],
-        solution=_normalize(unique_sampled_x),
+        expected_solution=x_sol[unique_sampled_indices],
+        solution=unique_sampled_x,
         expected_counts=n_entries_x * np.abs(x_sol / norm(x_sol))[unique_sampled_indices] ** 2,
         counts=np.squeeze(np.round(df_counts.values)),
     )
 
-    assert n_matches == 21
+    assert n_matches == 23
 
 
 if __name__ == "__main__":
-    test_finding_largest_entries_b()
+    test_solve_qi_b()
