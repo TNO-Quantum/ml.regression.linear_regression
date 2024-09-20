@@ -6,11 +6,11 @@ from typing import Optional
 import numpy as np
 from numpy import linalg as la
 from numpy.typing import NDArray
-from quantum_inspired_algorithms.quantum_inspired import compute_C_and_R
 from quantum_inspired_algorithms.quantum_inspired import compute_ls_probs
 from quantum_inspired_algorithms.quantum_inspired import estimate_lambdas
 from quantum_inspired_algorithms.quantum_inspired import sample_from_b
 from quantum_inspired_algorithms.quantum_inspired import sample_from_x
+from quantum_inspired_algorithms.sketching import FKV
 
 
 class EstimatorError(Exception):
@@ -83,20 +83,26 @@ class QILinearEstimator:
 
         # 1. Generate length-square probability distributions to sample from matrix `A`
         logging.info("1. Generate length-square probability distributions to sample from matrix `A`")
-        self.A_ls_prob_rows_, self.A_ls_prob_columns_, self.A_row_norms_, _, self.A_frobenius_ = compute_ls_probs(A)
+        (
+            self.A_ls_prob_rows_,
+            self.A_ls_prob_columns_2d_,
+            _,
+            _,
+            self.A_frobenius_,
+        ) = compute_ls_probs(A)
 
-        # 2. Build matrix `C` by sampling `r` rows and `c` columns
-        logging.info("2. Build matrix `C` by sampling `r` rows and `c` columns")
-        C, _, self.R_ls_prob_columns_, self.A_sampled_rows_idx_, self.A_sampled_columns_idx_ = compute_C_and_R(
+        # 2. Build matrix `C`
+        logging.info("2. Build matrix `C`")
+        self.sketcher_ = FKV(
             A,
             self.r,
             self.c,
-            self.A_row_norms_,
             self.A_ls_prob_rows_,
-            self.A_ls_prob_columns_,
+            self.A_ls_prob_columns_2d_,
             self.A_frobenius_,
             self.random_state,
         )
+        C = self.sketcher_.right_project(self.sketcher_.left_project(A))
 
         # 3. Compute the SVD of `C`
         logging.info("3. Compute the SVD of `C`")
@@ -106,7 +112,7 @@ class QILinearEstimator:
         self.rank_ = self.rank
         rank_recomputed = np.count_nonzero(self.sigma_ > self.sigma_threshold)
         if rank_recomputed < self.rank:
-            message = f"desired rank: {self.rank}; recomputed: {rank_recomputed}"
+            message = f"Desired rank: {self.rank}; recomputed: {rank_recomputed}"
             warnings.warn(message, RuntimeWarning)
             logging.warning(message)
             self.rank_ = rank_recomputed
@@ -128,10 +134,9 @@ class QILinearEstimator:
             self.rank_,
             self.w_left_,
             self.sigma_,
-            self.A_sampled_rows_idx_,
-            self.A_row_norms_,
+            self.sketcher_,
             self.A_ls_prob_rows_,
-            self.A_ls_prob_columns_,
+            self.A_ls_prob_columns_2d_,
             self.A_frobenius_,
             self.random_state,
             func,
@@ -143,12 +148,9 @@ class QILinearEstimator:
         """Check if the `fit` method has been called."""
         for attribute_name in [
             "A_ls_prob_rows_",
-            "A_ls_prob_columns_",
-            "A_row_norms_",
+            "A_ls_prob_columns_2d_",
             "A_frobenius_",
-            "R_ls_prob_columns_",
-            "A_sampled_rows_idx_",
-            "A_sampled_columns_idx_",
+            "sketcher_",
             "w_left_",
             "sigma_",
             "w_right_T_",
@@ -156,7 +158,7 @@ class QILinearEstimator:
             "lambdas_",
         ]:
             if not hasattr(self, attribute_name):
-                raise EstimatorError("Please call `fit` before making predictions.")
+                raise EstimatorError("Please call `fit` before making predictions")
 
     def predict_x(
         self,
@@ -190,10 +192,7 @@ class QILinearEstimator:
         for t in range(n_entries_x):
             sampled_indices_x[t], sampled_x[t] = sample_from_x(
                 A,
-                self.A_sampled_rows_idx_,
-                self.A_row_norms_,
-                self.R_ls_prob_columns_,
-                self.A_frobenius_,
+                self.sketcher_,
                 omega,
                 omega_norm,
                 self.random_state,
@@ -226,19 +225,15 @@ class QILinearEstimator:
 
         # Compute `phi`
         phi = self.w_right_T_.T[:, : self.rank_] @ self.lambdas_
+        phi_norm = float(la.norm(phi))
 
         # Sample entries of `b`
-        phi_norm = float(la.norm(phi))
         sampled_indices_b = np.zeros(n_entries_b, dtype=np.uint32)
         sampled_b = np.zeros(n_entries_b)
-        A_s_ls_prob_rows, _, _, A_s_column_norms, A_s_frobenius = compute_ls_probs(A)
         for t in range(n_entries_b):
             sampled_indices_b[t], sampled_b[t] = sample_from_b(
                 A,
-                self.A_sampled_columns_idx_,
-                A_s_column_norms,
-                A_s_ls_prob_rows,
-                A_s_frobenius,
+                self.sketcher_,
                 phi,
                 phi_norm,
                 self.random_state,
