@@ -28,6 +28,7 @@ dependencies = [
     "numpy==2.0.0",
     "scipy==1.13.1",
     "seaborn==0.13.2",
+    "scikit-learn==1.5.0",
 ]
 description = "Quantum-inspired algorithms"
 keywords = []

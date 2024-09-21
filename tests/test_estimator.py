@@ -141,7 +141,8 @@ def test_solve_qi_ridge():
     )
 
 
-def test_finding_largest_entries_b_underdetermined():
+@pytest.mark.parametrize("sketcher_name,n_matches_expected", [("fkv", 48), ("halko", 49)])
+def test_finding_largest_entries_b_underdetermined(sketcher_name: str, n_matches_expected: int):
     """Test quantum-inspired least squares."""
     # Load data
     A, b, _ = _load_data(underdetermined=True)
@@ -154,7 +155,7 @@ def test_finding_largest_entries_b_underdetermined():
     n_samples = 100
     n_entries_b = 1000
     rng = np.random.RandomState(111)
-    qi = QILinearEstimator(r, c, rank, n_samples, rng)
+    qi = QILinearEstimator(r, c, rank, n_samples, rng, sketcher_name=sketcher_name)
     qi = qi.fit(A, b)
     sampled_indices, sampled_b = qi.predict_b(A, n_entries_b)
 
@@ -169,14 +170,14 @@ def test_finding_largest_entries_b_underdetermined():
     n_matches = plot_solution(
         b,
         b_idx,
-        "test_finding_largest_entries_b_underdetermined",
+        f"test_finding_largest_entries_b_underdetermined_{sketcher_name}",
         expected_solution=b[unique_sampled_indices],
         solution=unique_sampled_b,
         expected_counts=n_entries_b * np.abs(b / norm(b))[unique_sampled_indices] ** 2,
         counts=np.squeeze(np.round(df_counts.values)),
     )
 
-    assert n_matches == 48
+    assert n_matches == n_matches_expected
 
 
 def test_finding_largest_entries_b():

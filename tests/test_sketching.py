@@ -3,10 +3,11 @@ import pytest  # noqa: F401
 from numpy.typing import NDArray
 from quantum_inspired_algorithms.quantum_inspired import compute_ls_probs
 from quantum_inspired_algorithms.sketching import FKV
+from quantum_inspired_algorithms.sketching import Halko
 
 
 def _get_FKV_sketcher(A: NDArray[np.float64], r: int, c: int) -> FKV:
-    """Load dummy FKV sketcher."""
+    """Load dummy sketcher."""
     A_ls_prob_rows, A_ls_prob_columns_2d, _, _, A_frobenius = compute_ls_probs(A)
     r = 30
     c = 40
@@ -22,8 +23,24 @@ def _get_FKV_sketcher(A: NDArray[np.float64], r: int, c: int) -> FKV:
     )
 
 
+def _get_Halko_sketcher(A: NDArray[np.float64], r: int, c: int) -> Halko:
+    """Load dummy sketcher."""
+    A_ls_prob_rows, _, A_ls_prob_columns, _, _ = compute_ls_probs(A)
+    r = 30
+    c = 40
+    random_state = np.random.RandomState(7)
+    return Halko(
+        A,
+        r,
+        c,
+        A_ls_prob_rows,
+        A_ls_prob_columns,
+        random_state,
+    )
+
+
 def test_FKV_dimensions():
-    """Test dimensions of FKV-based sketches."""
+    """Test dimensions of sketches."""
     A = np.arange(100 * 100, dtype=np.float64).reshape((100, 100))
     r = 30
     c = 40
@@ -36,6 +53,22 @@ def test_FKV_dimensions():
     assert left_sketch_matrix.shape == (30, 100)
     assert right_sketch_matrix.shape == (100, 40)
     assert left_right_sketch_matrix.shape == (30, 40)
+
+
+def test_Halko_dimensions():
+    """Test dimensions of sketches."""
+    A = np.arange(100 * 100, dtype=np.float64).reshape((100, 100))
+    r = 30
+    c = 40
+    sketcher = _get_Halko_sketcher(A, r, c)
+
+    left_sketch_matrix = sketcher.left_project(A)
+    right_sketch_matrix = sketcher.right_project(A)
+    left_right_sketch_matrix = sketcher.right_project(sketcher.left_project(A))
+
+    assert left_sketch_matrix.shape == (30 + 10, 100)
+    assert right_sketch_matrix.shape == (100, 40 + 10)
+    assert left_right_sketch_matrix.shape == (30 + 10, 40 + 10)
 
 
 def test_FKV_samplers():
