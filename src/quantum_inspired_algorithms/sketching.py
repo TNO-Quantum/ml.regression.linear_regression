@@ -3,6 +3,7 @@ from abc import abstractmethod
 import numpy as np
 from numpy import linalg as la
 from numpy.typing import NDArray
+from sklearn.utils.extmath import randomized_range_finder
 
 
 class Sketcher(ABC):
@@ -46,7 +47,7 @@ class FKV(Sketcher):
         frobenius: NDArray[np.float64],
         rng: np.random.RandomState,
     ) -> None:
-        """Init QILinearEstimator.
+        """Init FKV.
 
         Note: LS stands for length-square.
 
@@ -128,5 +129,91 @@ class FKV(Sketcher):
 
         # Sample row index from LS distribution of corresponding column
         sample_i = rng.choice(self._n_rows, 1, p=self._C_ls_prob_rows[:, sample_j])[0]
+
+        return sample_i
+
+
+class Halko(Sketcher):
+    """Halko sketching."""
+
+    def __init__(
+        self,
+        A: NDArray[np.float64],
+        r: int,
+        c: int,
+        ls_prob_rows: NDArray[np.float64],
+        ls_prob_columns: NDArray[np.float64],
+        rng: np.random.RandomState,
+    ) -> None:
+        """Init Halko.
+
+        Note: LS stands for length-square.
+
+        Args:
+            A: coefficient matrix.
+            r: number of rows for left projection matrix.
+            c: number of columns for right projection matrix.
+            ls_prob_rows: row LS probability distribution of `A`.
+            ls_prob_columns: column LS probability distribution of `A`.
+            rng: random state.
+        """
+        self._Q_left = Halko._get_low_dimensional_projector(A, axis=0, n_components=r, random_state=rng)
+        self._Q_right = Halko._get_low_dimensional_projector(A, axis=1, n_components=c, random_state=rng)
+        self._ls_prob_rows = ls_prob_rows
+        self._ls_prob_columns = ls_prob_columns
+
+    @classmethod
+    def _get_low_dimensional_projector(
+        cls,
+        M: NDArray[np.float64],
+        axis: int,
+        n_components: int,
+        random_state: np.random.RandomState,
+    ) -> NDArray[np.float128]:
+        """Find random matrix to reduce dimensionality of axis of `M`."""
+        n_oversamples = 10
+        n_random = n_components + n_oversamples
+        n_iter = 7 if n_components < 0.1 * min(M.shape) else 4
+        if axis == 1:
+            M = M.T
+        Q = np.asarray(
+            randomized_range_finder(
+                M,
+                size=n_random,
+                n_iter=n_iter,
+                power_iteration_normalizer="auto",
+                random_state=random_state,
+            )
+        )
+        if axis == 0:
+            Q = Q.T
+
+        return np.asarray(Q)
+
+    def left_project(self, M: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Define left projector."""
+        return self._Q_left @ M
+
+    def right_project(self, M: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Define right projector."""
+        return M @ self._Q_right
+
+    def set_up_column_sampler(self, A: NDArray[np.float64]) -> None:
+        """No setup required."""
+
+    def set_up_row_sampler(self, A: NDArray[np.float64]) -> None:
+        """No setup required."""
+
+    def sample_column_idx(self, rng: np.random.RandomState) -> int:
+        """Sample a column index."""
+        n_cols = self._ls_prob_columns.size
+        sample_j = rng.choice(n_cols, 1, p=self._ls_prob_columns)[0]
+
+        return sample_j
+
+    def sample_row_idx(self, rng: np.random.RandomState) -> int:
+        """Sample a row index."""
+        n_rows = self._ls_prob_rows.size
+        sample_i = rng.choice(n_rows, 1, p=self._ls_prob_rows)[0]
 
         return sample_i

@@ -11,6 +11,7 @@ from quantum_inspired_algorithms.quantum_inspired import estimate_lambdas
 from quantum_inspired_algorithms.quantum_inspired import sample_from_b
 from quantum_inspired_algorithms.quantum_inspired import sample_from_x
 from quantum_inspired_algorithms.sketching import FKV
+from quantum_inspired_algorithms.sketching import Halko
 
 
 class EstimatorError(Exception):
@@ -32,6 +33,7 @@ class QILinearEstimator:
         n_samples: int,
         random_state: np.random.RandomState,
         sigma_threshold: float = 1e-15,
+        sketcher_name: str = "fkv",
         func: Optional[Callable[[float], float]] = None,
     ) -> None:
         """Init QILinearEstimator.
@@ -46,6 +48,7 @@ class QILinearEstimator:
             random_state: random state.
             sigma_threshold: the argument `rank` is recomputed in case it is higher
                              the number of singular values below this threhold.
+            sketcher_name: name of sketching method: "fkv" or "halko".
             func: function to transform singular values when estimating lambda coefficients.
                   This can be used for Tikhonov regularization purposes.
         """
@@ -55,6 +58,7 @@ class QILinearEstimator:
         self.n_samples = n_samples
         self.random_state = random_state
         self.sigma_threshold = sigma_threshold
+        self.sketcher_name = sketcher_name
         self.func = func
 
     def fit(
@@ -84,24 +88,37 @@ class QILinearEstimator:
         # 1. Generate length-square probability distributions to sample from matrix `A`
         logging.info("1. Generate length-square probability distributions to sample from matrix `A`")
         (
-            self.A_ls_prob_rows_,
-            self.A_ls_prob_columns_2d_,
+            A_ls_prob_rows,
+            A_ls_prob_columns_2d,
+            A_ls_prob_columns,
             _,
-            _,
-            self.A_frobenius_,
+            A_frobenius,
         ) = compute_ls_probs(A)
 
         # 2. Build matrix `C`
         logging.info("2. Build matrix `C`")
-        self.sketcher_ = FKV(
-            A,
-            self.r,
-            self.c,
-            self.A_ls_prob_rows_,
-            self.A_ls_prob_columns_2d_,
-            self.A_frobenius_,
-            self.random_state,
-        )
+        if self.sketcher_name == "fkv":
+            self.sketcher_ = FKV(
+                A,
+                self.r,
+                self.c,
+                A_ls_prob_rows,
+                A_ls_prob_columns_2d,
+                A_frobenius,
+                self.random_state,
+            )
+        elif self.sketcher_name == "halko":
+            self.sketcher_ = Halko(
+                A,
+                self.r,
+                self.c,
+                A_ls_prob_rows,
+                A_ls_prob_columns,
+                self.random_state,
+            )
+        else:
+            raise ValueError('`sketcher_name` should be either "fkv" or "halko"')
+
         C = self.sketcher_.right_project(self.sketcher_.left_project(A))
 
         # 3. Compute the SVD of `C`
@@ -135,9 +152,9 @@ class QILinearEstimator:
             self.w_left_,
             self.sigma_,
             self.sketcher_,
-            self.A_ls_prob_rows_,
-            self.A_ls_prob_columns_2d_,
-            self.A_frobenius_,
+            A_ls_prob_rows,
+            A_ls_prob_columns_2d,
+            A_frobenius,
             self.random_state,
             func,
         )
@@ -147,9 +164,6 @@ class QILinearEstimator:
     def _check_is_fitted(self):
         """Check if the `fit` method has been called."""
         for attribute_name in [
-            "A_ls_prob_rows_",
-            "A_ls_prob_columns_2d_",
-            "A_frobenius_",
             "sketcher_",
             "w_left_",
             "sigma_",
