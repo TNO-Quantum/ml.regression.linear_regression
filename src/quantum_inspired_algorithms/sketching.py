@@ -158,7 +158,7 @@ class Halko(Sketcher):
             rng: random state.
         """
         self._Q_left = Halko._get_low_dimensional_projector(A, axis=0, n_components=r, random_state=rng)
-        self._Q_right = Halko._get_low_dimensional_projector(A, axis=1, n_components=c, random_state=rng)
+        self._Q_right = Halko._get_low_dimensional_projector(self._Q_left @ A, axis=1, n_components=c, random_state=rng)
         self._ls_prob_rows = ls_prob_rows
         self._ls_prob_columns = ls_prob_columns
 

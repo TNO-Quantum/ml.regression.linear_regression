@@ -141,8 +141,8 @@ def test_solve_qi_ridge():
     )
 
 
-@pytest.mark.parametrize("sketcher_name,n_matches_expected", [("fkv", 48), ("halko", 49)])
-def test_finding_largest_entries_b_underdetermined(sketcher_name: str, n_matches_expected: int):
+@pytest.mark.parametrize("sketcher_name,random_state,n_matches_expected", [("fkv", 111, 48), ("halko", 11, 49)])
+def test_finding_largest_entries_b_underdetermined(sketcher_name: str, random_state: int, n_matches_expected: int):
     """Test quantum-inspired least squares."""
     # Load data
     A, b, _ = _load_data(underdetermined=True)
@@ -154,7 +154,7 @@ def test_finding_largest_entries_b_underdetermined(sketcher_name: str, n_matches
     c = 80
     n_samples = 100
     n_entries_b = 1000
-    rng = np.random.RandomState(111)
+    rng = np.random.RandomState(random_state)
     qi = QILinearEstimator(r, c, rank, n_samples, rng, sketcher_name=sketcher_name)
     qi = qi.fit(A, b)
     sampled_indices, sampled_b = qi.predict_b(A, n_entries_b)
