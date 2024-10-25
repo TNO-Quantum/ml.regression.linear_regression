@@ -8,7 +8,7 @@ The class `estimator.QILinearEstimator` provides three methods:
 `fit`, `predict_x`, and `predict_b`. Once the `fit` method has been called using `A` and `b`,
 `predict_x` can be used to sample entries of the estimated coefficient vector. Alternatively,
 `predict_b` can be used to sample entries of predictions corresponding to (un)observed
-target values. Examples can be found in the `tests` directory.
+target values.
 
 The project setup is documented in [project_setup.md](project_setup.md).
 
@@ -21,6 +21,41 @@ git clone git@github.com:QuantumApplicationLab/quantum-inspired-algorithms.git
 cd quantum-inspired-algorithms
 python -m pip install .
 ```
+
+## Example
+
+```python
+import numpy as np
+from sklearn.datasets import make_low_rank_matrix
+from sklearn.model_selection import train_test_split
+from quantum_inspired_algorithms.estimator import QILinearEstimator
+
+rng = np.random.RandomState(7)
+
+# Generate example data
+m = 700
+n = 100
+A = make_low_rank_matrix(n_samples=m, n_features=n, effective_rank=3, random_state=rng, tail_strength=0.1)
+x = rng.normal(0, 1, A.shape[1])
+b = A @ x
+
+# Create training and test datasets
+A_train, A_test, b_train, b_test = train_test_split(A, b, test_size=0.3, random_state=rng)
+
+# Fit quantum-inspired model
+rank = 3
+r = 100
+c = 30
+n_samples = 100  # for Monte Carlo methods
+qi = QILinearEstimator(r, c, rank, n_samples, rng, sketcher_name="fkv")
+qi = qi.fit(A_train, b_train)
+
+# Sample from b (vector of predictions)
+n_entries_b = 1000
+sampled_indices_b, sampled_b = qi.predict_b(A_test, n_entries_b)
+```
+
+More examples can be found in the `tests` directory.
 
 ## Contributing
 
