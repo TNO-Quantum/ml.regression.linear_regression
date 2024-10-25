@@ -112,7 +112,6 @@ class QILinearEstimator:
                 A,
                 self.r,
                 self.c,
-                A_ls_prob_rows,
                 A_ls_prob_columns,
                 self.random_state,
             )

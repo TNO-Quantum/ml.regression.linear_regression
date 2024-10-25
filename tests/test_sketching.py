@@ -25,15 +25,12 @@ def _get_FKV_sketcher(A: NDArray[np.float64], r: int, c: int) -> FKV:
 
 def _get_Halko_sketcher(A: NDArray[np.float64], r: int, c: int) -> Halko:
     """Load dummy sketcher."""
-    A_ls_prob_rows, _, A_ls_prob_columns, _, _ = compute_ls_probs(A)
-    r = 30
-    c = 40
+    _, _, A_ls_prob_columns, _, _ = compute_ls_probs(A)
     random_state = np.random.RandomState(7)
     return Halko(
         A,
         r,
         c,
-        A_ls_prob_rows,
         A_ls_prob_columns,
         random_state,
     )
@@ -66,9 +63,9 @@ def test_Halko_dimensions():
     right_sketch_matrix = sketcher.right_project(A)
     left_right_sketch_matrix = sketcher.right_project(sketcher.left_project(A))
 
-    assert left_sketch_matrix.shape == (30 + 10, 100)
-    assert right_sketch_matrix.shape == (100, 40 + 10)
-    assert left_right_sketch_matrix.shape == (30 + 10, 40 + 10)
+    assert left_sketch_matrix.shape == (r + 10, 100)
+    assert right_sketch_matrix.shape == (100, r + 10)
+    assert left_right_sketch_matrix.shape == (r + 10, r + 10)
 
 
 def test_FKV_samplers():

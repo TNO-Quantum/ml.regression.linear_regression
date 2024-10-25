@@ -141,7 +141,6 @@ class Halko(Sketcher):
         A: NDArray[np.float64],
         r: int,
         c: int,
-        ls_prob_rows: NDArray[np.float64],
         ls_prob_columns: NDArray[np.float64],
         rng: np.random.RandomState,
     ) -> None:
@@ -153,13 +152,11 @@ class Halko(Sketcher):
             A: coefficient matrix.
             r: number of rows for left projection matrix.
             c: number of columns for right projection matrix.
-            ls_prob_rows: row LS probability distribution of `A`.
             ls_prob_columns: column LS probability distribution of `A`.
             rng: random state.
         """
         self._Q_left = Halko._get_low_dimensional_projector(A, axis=0, n_components=r, random_state=rng)
         self._Q_right = Halko._get_low_dimensional_projector(self._Q_left @ A, axis=1, n_components=c, random_state=rng)
-        self._ls_prob_rows = ls_prob_rows
         self._ls_prob_columns = ls_prob_columns
 
     @classmethod
@@ -169,7 +166,7 @@ class Halko(Sketcher):
         axis: int,
         n_components: int,
         random_state: np.random.RandomState,
-    ) -> NDArray[np.float128]:
+    ) -> NDArray[np.float64]:
         """Find random matrix to reduce dimensionality of axis of `M`."""
         n_oversamples = 10
         n_random = n_components + n_oversamples
@@ -202,7 +199,12 @@ class Halko(Sketcher):
         """No setup required."""
 
     def set_up_row_sampler(self, A: NDArray[np.float64]) -> None:
-        """No setup required."""
+        """Build LS distribution to sample rows from matrix `C`."""
+        A_row_norms = la.norm(A, axis=1)
+        A_row_norms_squared = A_row_norms**2
+        A_frobenius = np.sqrt(np.sum(A_row_norms_squared))
+        self._ls_prob_rows = A_row_norms_squared / A_frobenius**2
+        self._n_rows = A.shape[0]
 
     def sample_column_idx(self, rng: np.random.RandomState) -> int:
         """Sample a column index."""
@@ -213,7 +215,6 @@ class Halko(Sketcher):
 
     def sample_row_idx(self, rng: np.random.RandomState) -> int:
         """Sample a row index."""
-        n_rows = self._ls_prob_rows.size
-        sample_i = rng.choice(n_rows, 1, p=self._ls_prob_rows)[0]
+        sample_i = rng.choice(self._n_rows, 1, p=self._ls_prob_rows)[0]
 
         return sample_i
