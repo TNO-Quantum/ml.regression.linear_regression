@@ -1,18 +1,22 @@
-# YAML 1.2
----
-cff-version: "1.2.0"
-title: "quantum_inspired_algorithms"
-authors:
-  -
-    family-names: Quantum
-    given-names: TNO
-    orcid: "https://orcid.org/0000-0000-0000-0000"
-date-released: 20??-MM-DD
-doi: <insert your DOI here>
-version: "0.1.0"
-repository-code: "https://github.com/QuantumApplicationLab/quantum-inspired-algorithms"
-keywords:
-  - keyword1
-  - keyword2
-message: "If you use this software, please cite it using these metadata."
+cff-version: 1.2.0
 license: Apache-2.0
+message: If you use this software, please cite it using these metadata.
+authors:
+      - name: TNO Quantum
+        city: The Hague
+        country: NL
+        email: tnoquantum@tno.nl
+        website: https://tno.nl
+type: software
+url: https://tno.nl
+contact:
+      - name: TNO Quantum
+        city: The Hague
+        country: NL
+        email: tnoquantum@tno.nl
+        website: https://tno.nl
+repository-code: https://github.com/TNO-Quantum/ml.regression.linear_regression
+repository-artifact: https://pypi.org/project/tno.quantum.ml.regression.linear_regression
+title: TNO Quantum - Machine Learning - Regression - Linear Regression
+version: 1.0.0
+date-released: 2025-10-17

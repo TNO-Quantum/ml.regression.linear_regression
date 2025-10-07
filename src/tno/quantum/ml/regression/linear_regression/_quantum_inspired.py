@@ -1,10 +1,23 @@
+"""Quantum-inspired sampling utilities for linear regression.
+
+This module provides functions for quantum-inspired sampling techniques used in
+in the context of randomized numerical linear algebra and sketching methods.
+It includes utilities for computing length-square (LS) probability distributions,
+estimating lambda coefficients via Monte Carlo methods,
+and performing LS sampling from both coefficient vectors and predictions.
+"""
+
 import logging
 import warnings
-from typing import Callable
+from typing import Callable, SupportsFloat
+
 import numpy as np
 from numpy import linalg as la
 from numpy.typing import NDArray
-from quantum_inspired_algorithms.sketching import Sketcher
+
+from tno.quantum.ml.regression.linear_regression._sketching import Sketcher
+
+logger = logging.getLogger(__name__)
 
 
 def compute_ls_probs(
@@ -14,12 +27,12 @@ def compute_ls_probs(
     NDArray[np.float64],
     NDArray[np.float64],
     NDArray[np.float64],
-    NDArray[np.float64],
+    float,
 ]:
     """Compute length-square (LS) probability distributions for sampling `A`.
 
     Args:
-        A: coefficient matrix.
+        A: coefficient matrix `A`.
 
     Returns:
         LS probability distribution for rows,
@@ -37,7 +50,7 @@ def compute_ls_probs(
     A_column_norms_squared = A_column_norms**2
 
     # Compute Frobenius norm
-    A_frobenius = np.sqrt(np.sum(A_row_norms_squared))
+    A_frobenius = float(np.sqrt(np.sum(A_row_norms_squared)))
 
     # Compute LS probabilities for rows
     A_ls_prob_rows = A_row_norms_squared / A_frobenius**2
@@ -60,7 +73,7 @@ def compute_ls_probs(
     )
 
 
-def estimate_lambdas(
+def estimate_lambdas(  # noqa: PLR0913
     A: NDArray[np.float64],
     b: NDArray[np.float64],
     n_samples: int,
@@ -70,18 +83,18 @@ def estimate_lambdas(
     sketcher: Sketcher,
     A_ls_prob_rows: NDArray[np.float64],
     A_ls_prob_columns: NDArray[np.float64],
-    A_frobenius: NDArray[np.float64],
+    A_frobenius: float,
     rng: np.random.RandomState,
-    func: Callable[[float], float],
+    func: Callable[[SupportsFloat], SupportsFloat],
 ) -> NDArray[np.float64]:
     """Estimate lambda coefficients.
 
     Args:
-        A: coefficient matrix.
-        b: vector b.
+        A: coefficient matrix `A`.
+        b: vector `b`.
         n_samples: number of samples to estimate inner products.
                    Note: the sampling is  performed from entries of `A`,
-                   so there are `A.shape[0] * A.shape[1]` possible entries.
+                   so there are ``A.shape[0] * A.shape[1]`` possible entries.
         rank: rank used to approximate matrix `A`.
         w: left-singular vector of `C`.
         sigma: singular values of `C`.
@@ -99,7 +112,7 @@ def estimate_lambdas(
     n_realizations = 10
     lambdas_realizations = np.zeros((n_realizations, rank))
     for realization_i in range(n_realizations):
-        logging.info(f"---Realization {realization_i}")
+        logger.info("---Realization %s", realization_i)
         for ell in range(rank):
             # 1. Generate sample indices
             samples_i = []
@@ -120,17 +133,19 @@ def estimate_lambdas(
             outer_prod_b_v = np.squeeze(b[samples_i]) * v_approx
 
             # Estimate inner product between `A` and `outer_prod_b_v`
-            inner_prod = np.mean(A_frobenius**2 / A[samples_i, samples_j] * outer_prod_b_v)
+            inner_prod = np.mean(
+                A_frobenius**2 / A[samples_i, samples_j] * outer_prod_b_v
+            )
 
             # Compute lambda
-            lambdas_realizations[realization_i, ell] = inner_prod / sigma[ell] / func(sigma[ell])
+            lambdas_realizations[realization_i, ell] = (
+                inner_prod / sigma[ell] / func(sigma[ell])
+            )
 
-    lambdas = np.median(lambdas_realizations, axis=0)
-
-    return lambdas
+    return np.asarray(np.median(lambdas_realizations, axis=0))
 
 
-def sample_from_b(
+def sample_from_b(  # noqa: PLR0913
     A: NDArray[np.float64],
     sketcher: Sketcher,
     phi: NDArray[np.float64],
@@ -141,7 +156,7 @@ def sample_from_b(
     """Perform length-square (LS) sampling from the predicted `b`.
 
     Args:
-        A: coefficient matrix.
+        A: coefficient matrix `A`.
         sketcher: sketcher to left project `A` and sample its rows.
         phi: vector phi.
         phi_norm: norm of `phi`.
@@ -170,15 +185,16 @@ def sample_from_b(
             return sample_i, dot_prod_C_i_omega
 
     message = (
-        f"Maximum number of sampling attempts ({max_n_sampling_attempts}) exceeded. Returning sample from last attempt."
+        "Maximum number of sampling attempts "
+        f"({max_n_sampling_attempts}) exceeded. Returning sample from last attempt."
     )
-    warnings.warn(message, RuntimeWarning)
-    logging.warning(message)
+    warnings.warn(message, RuntimeWarning, stacklevel=2)
+    logger.warning(message)
 
     return sample_i, dot_prod_C_i_omega
 
 
-def sample_from_x(
+def sample_from_x(  # noqa: PLR0913
     A: NDArray[np.float64],
     sketcher: Sketcher,
     omega: NDArray[np.float64],
@@ -189,9 +205,9 @@ def sample_from_x(
     """Perform length-square (LS) sampling from the solution vector.
 
     Args:
-        A: coefficient matrix.
+        A: coefficient matrix `A`.
         sketcher: sketcher to left project `A` and sample its columns.
-        omega: vector omega.
+        omega: vector `omega`.
         omega_norm: norm of `omega`.
         rng: random state.
         max_n_sampling_attempts: maximum number of sampling attempts.
@@ -218,9 +234,10 @@ def sample_from_x(
             return sample_j, dot_prod_R_j_omega
 
     message = (
-        f"Maximum number of sampling attempts ({max_n_sampling_attempts}) exceeded. Returning sample from last attempt."
+        "Maximum number of sampling attempts "
+        f"({max_n_sampling_attempts}) exceeded. Returning sample from last attempt."
     )
-    warnings.warn(message, RuntimeWarning)
-    logging.warning(message)
+    warnings.warn(message, RuntimeWarning, stacklevel=2)
+    logger.warning(message)
 
     return sample_j, dot_prod_R_j_omega

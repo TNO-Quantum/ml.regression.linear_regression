@@ -1,12 +1,19 @@
-from abc import ABC
-from abc import abstractmethod
+"""This module contains sketching algorithms for reducing dimensionality.
+
+A "sketch" refers to a technique for compressing large matrices into
+much smaller representations while approximately preserving their
+essential properties.
+"""
+
+from abc import ABC, abstractmethod
+
 import numpy as np
 from numpy import linalg as la
 from numpy.typing import NDArray
 from sklearn.utils.extmath import randomized_range_finder
 
 
-class Sketcher(ABC):
+class Sketcher(ABC):  # noqa: PLW1641
     """Base class for sketchers."""
 
     @abstractmethod
@@ -33,26 +40,55 @@ class Sketcher(ABC):
     def sample_row_idx(self, rng: np.random.RandomState) -> int:
         """Sample row index of right sketch."""
 
+    def __eq__(self, other: object) -> bool:
+        """Check for equality for serialization purposes."""
+        if not isinstance(other, Sketcher):
+            return NotImplemented
+
+        # Get the dictionaries of attributes
+        self_attrs = self.__dict__
+        other_attrs = other.__dict__
+
+        # Check the keys
+        if self_attrs.keys() != other_attrs.keys():
+            return False
+
+        # Iterate and compare values
+        for key, self_value in self_attrs.items():
+            other_value = other_attrs[key]
+
+            # Check if they are numpy arrays and compare accordingly
+            is_self_np = isinstance(self_value, np.ndarray)
+            is_other_np = isinstance(other_value, np.ndarray)
+
+            if is_self_np and is_other_np:
+                if not np.array_equal(self_value, other_value):
+                    return False
+            elif is_self_np != is_other_np or self_value != other_value:
+                return False
+
+        return True
+
 
 class FKV(Sketcher):
-    """FKV sketching."""
+    """FKV (Frieze-Kannan-Vempala) sketching."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         A: NDArray[np.float64],
         r: int,
         c: int,
         ls_prob_rows: NDArray[np.float64],
         ls_prob_columns_2d: NDArray[np.float64],
-        frobenius: NDArray[np.float64],
+        frobenius: float,
         rng: np.random.RandomState,
     ) -> None:
-        """Init FKV.
+        """Init :py:class:`FKV`.
 
         Note: LS stands for length-square.
 
         Args:
-            A: coefficient matrix.
+            A: coefficient matrix `A`.
             r: number of rows for left projection matrix.
             c: number of columns for right projection matrix.
             ls_prob_rows: row LS probability distribution of `A`.
@@ -63,7 +99,9 @@ class FKV(Sketcher):
         m_rows, n_cols = A.shape
 
         # Sample row indices
-        sampled_rows_idx = rng.choice(m_rows, r, replace=True, p=ls_prob_rows).astype(np.uint32)
+        sampled_rows_idx = rng.choice(m_rows, r, replace=True, p=ls_prob_rows).astype(
+            np.uint32
+        )
 
         # Sample column indices
         sampled_columns_idx = np.zeros(c, dtype=np.uint32)
@@ -72,11 +110,17 @@ class FKV(Sketcher):
             i = rng.choice(sampled_rows_idx, replace=True)
 
             # Sample column from LS distribution of row `i`
-            sampled_columns_idx[j] = rng.choice(n_cols, 1, p=ls_prob_columns_2d[i, :])[0]
+            sampled_columns_idx[j] = rng.choice(n_cols, 1, p=ls_prob_columns_2d[i, :])[
+                0
+            ]
 
         # Compute norms
         sampled_row_norms = la.norm(A[sampled_rows_idx, :], axis=1)
-        R = A[sampled_rows_idx, :] * frobenius / (np.sqrt(r) * sampled_row_norms[:, None])
+        R = (
+            A[sampled_rows_idx, :]
+            * frobenius
+            / (np.sqrt(r) * sampled_row_norms[:, None])
+        )
         R_sampled_column_norms = la.norm(R[:, sampled_columns_idx], axis=0)
 
         # Set sketching parameters
@@ -90,11 +134,15 @@ class FKV(Sketcher):
 
     def left_project(self, M: NDArray[np.float64]) -> NDArray[np.float64]:
         """Define left projector."""
-        return M[self._sampled_rows_idx, :] * self._frobenius / (np.sqrt(self._r) * self._sampled_row_norms[:, None])
+        return np.asarray(
+            M[self._sampled_rows_idx, :]
+            * self._frobenius
+            / (np.sqrt(self._r) * self._sampled_row_norms[:, None])
+        )
 
     def right_project(self, M: NDArray[np.float64]) -> NDArray[np.float64]:
         """Define right projector."""
-        return (
+        return np.asarray(
             M[:, self._sampled_columns_idx]
             * self._frobenius
             / (np.sqrt(self._c) * self._R_sampled_column_norms[None, :])
@@ -118,9 +166,11 @@ class FKV(Sketcher):
         sample_i = rng.choice(self._r)
 
         # Sample column index from LS distribution of corresponding row
-        sample_j = rng.choice(self._n_cols, 1, p=self._R_ls_prob_columns[sample_i, :])[0]
+        sample_j = rng.choice(self._n_cols, 1, p=self._R_ls_prob_columns[sample_i, :])[
+            0
+        ]
 
-        return sample_j
+        return int(sample_j)
 
     def sample_row_idx(self, rng: np.random.RandomState) -> int:
         """Sample a row index from `C`."""
@@ -130,7 +180,7 @@ class FKV(Sketcher):
         # Sample row index from LS distribution of corresponding column
         sample_i = rng.choice(self._n_rows, 1, p=self._C_ls_prob_rows[:, sample_j])[0]
 
-        return sample_i
+        return int(sample_i)
 
 
 class Halko(Sketcher):
@@ -144,19 +194,23 @@ class Halko(Sketcher):
         ls_prob_columns: NDArray[np.float64],
         rng: np.random.RandomState,
     ) -> None:
-        """Init Halko.
+        """Init :py:class:`Halko`.
 
         Note: LS stands for length-square.
 
         Args:
-            A: coefficient matrix.
+            A: coefficient matrix `A`.
             r: number of rows for left projection matrix.
             c: number of columns for right projection matrix.
             ls_prob_columns: column LS probability distribution of `A`.
             rng: random state.
         """
-        self._Q_left = Halko._get_low_dimensional_projector(A, axis=0, n_components=r, random_state=rng)
-        self._Q_right = Halko._get_low_dimensional_projector(self._Q_left @ A, axis=1, n_components=c, random_state=rng)
+        self._Q_left = Halko._get_low_dimensional_projector(
+            A, axis=0, n_components=r, random_state=rng
+        )
+        self._Q_right = Halko._get_low_dimensional_projector(
+            self._Q_left @ A, axis=1, n_components=c, random_state=rng
+        )
         self._ls_prob_columns = ls_prob_columns
 
     @classmethod
@@ -211,10 +265,10 @@ class Halko(Sketcher):
         n_cols = self._ls_prob_columns.size
         sample_j = rng.choice(n_cols, 1, p=self._ls_prob_columns)[0]
 
-        return sample_j
+        return int(sample_j)
 
     def sample_row_idx(self, rng: np.random.RandomState) -> int:
         """Sample a row index."""
         sample_i = rng.choice(self._n_rows, 1, p=self._ls_prob_rows)[0]
 
-        return sample_i
+        return int(sample_i)

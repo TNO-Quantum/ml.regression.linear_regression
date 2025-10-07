@@ -1,12 +1,14 @@
 import numpy as np
 import pytest  # noqa: F401
 from numpy.typing import NDArray
-from quantum_inspired_algorithms.quantum_inspired import compute_ls_probs
-from quantum_inspired_algorithms.sketching import FKV
-from quantum_inspired_algorithms.sketching import Halko
+
+from tno.quantum.ml.regression.linear_regression._quantum_inspired import (
+    compute_ls_probs,
+)
+from tno.quantum.ml.regression.linear_regression._sketching import FKV, Halko
 
 
-def _get_FKV_sketcher(A: NDArray[np.float64], r: int, c: int) -> FKV:
+def _get_FKV_sketcher(A: NDArray[np.float64], r: int, c: int) -> FKV:  # noqa: N802
     """Load dummy sketcher."""
     A_ls_prob_rows, A_ls_prob_columns_2d, _, _, A_frobenius = compute_ls_probs(A)
     r = 30
@@ -23,7 +25,7 @@ def _get_FKV_sketcher(A: NDArray[np.float64], r: int, c: int) -> FKV:
     )
 
 
-def _get_Halko_sketcher(A: NDArray[np.float64], r: int, c: int) -> Halko:
+def _get_Halko_sketcher(A: NDArray[np.float64], r: int, c: int) -> Halko:  # noqa: N802
     """Load dummy sketcher."""
     _, _, A_ls_prob_columns, _, _ = compute_ls_probs(A)
     random_state = np.random.RandomState(7)
@@ -36,7 +38,7 @@ def _get_Halko_sketcher(A: NDArray[np.float64], r: int, c: int) -> Halko:
     )
 
 
-def test_FKV_dimensions():
+def test_FKV_dimensions() -> None:  # noqa: N802
     """Test dimensions of sketches."""
     A = np.arange(100 * 100, dtype=np.float64).reshape((100, 100))
     r = 30
@@ -52,7 +54,7 @@ def test_FKV_dimensions():
     assert left_right_sketch_matrix.shape == (30, 40)
 
 
-def test_Halko_dimensions():
+def test_Halko_dimensions() -> None:  # noqa: N802
     """Test dimensions of sketches."""
     A = np.arange(100 * 100, dtype=np.float64).reshape((100, 100))
     r = 30
@@ -68,7 +70,7 @@ def test_Halko_dimensions():
     assert left_right_sketch_matrix.shape == (r + 10, r + 10)
 
 
-def test_FKV_samplers():
+def test_FKV_samplers() -> None:  # noqa: N802
     """Test FKV-based samplers."""
     A = np.arange(100 * 100, dtype=np.float64).reshape((100, 100))
     r = 30
