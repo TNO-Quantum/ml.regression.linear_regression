@@ -61,7 +61,7 @@ qi = qi.fit(A_train, b_train)
 
 # Sample from b (vector of predictions)
 n_entries_b = 1000
-sampled_indices_b, sampled_b = qi.predict_b(A_test, n_entries_b)
+sampled_indices_b, sampled_b = qi.sample_prediction_b(A_test, n_entries_b)
 ```
 
 ## Credits
