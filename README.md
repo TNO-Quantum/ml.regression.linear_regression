@@ -18,8 +18,7 @@ that comply with international export control laws.*
 
 ## Documentation
 
-Documentation of the linear regression package can be found [here](https://tno-    
-quantum.github.io/documentation/).
+Documentation of the linear regression package can be found [here](https://tno-quantum.github.io/documentation/).
 
 ## Install
 
